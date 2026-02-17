@@ -1,0 +1,9 @@
+.venv/
+.idea/
+logs/
+__pycache__/
+*.pyc
+*.pkl
+records.json
+.pytest_cache/
+dataset/

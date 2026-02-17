@@ -1,0 +1,133 @@
+/* Main Board Area */
+.main-board {
+    flex: 1;
+    position: relative;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: var(--border-thin);
+    min-height: 200px;
+}
+
+#board-svg {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+/* Zoom Controls Overlay */
+.zoom-controls {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-thin);
+    backdrop-filter: blur(4px);
+    z-index: 10;
+}
+
+.zoom-controls button {
+    background: transparent;
+    border: 1px solid var(--primary-blue);
+    color: var(--primary-blue);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 16px;
+}
+
+.zoom-controls button#btn-zoom-reset {
+    width: auto;
+    padding: 0 8px;
+    font-size: 10px;
+}
+
+.zoom-controls button:hover {
+    background: var(--primary-blue);
+    color: #fff;
+    box-shadow: 0 0 10px var(--primary-glow);
+}
+
+.connection-line {
+    stroke: rgba(255, 255, 255, 0.1);
+    stroke-width: 1.5;
+    transition: all 0.3s;
+}
+
+.connection-line.highlight {
+    stroke: var(--accent-green);
+    stroke-width: 4;
+    stroke-opacity: 0.8;
+    filter: drop-shadow(0 0 5px var(--accent-green));
+}
+
+.territory-group {
+    transition: all 0.2s;
+    transform-origin: center;
+}
+
+.territory-group.selected {
+    transform: scale(1.05);
+}
+
+.territory-cell {
+    fill: rgba(255, 255, 255, 0.05);
+    stroke: rgba(255, 255, 255, 0.2);
+    stroke-width: 1;
+    transition: all 0.2s;
+}
+
+.territory-cell:hover {
+    stroke: #fff;
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
+}
+
+.territory-cell.owner-1 {
+    fill: rgba(37, 140, 244, 0.2);
+    stroke: var(--primary-blue);
+}
+
+.territory-cell.owner-2 {
+    fill: rgba(255, 42, 109, 0.2);
+    stroke: var(--accent-red);
+}
+
+.territory-cell.selected-src {
+    stroke: #fff;
+    stroke-width: 3;
+    filter: drop-shadow(0 0 10px var(--primary-blue));
+}
+
+.territory-cell.selected-dest {
+    stroke: #fff;
+    stroke-width: 3;
+    stroke-dasharray: 5, 5;
+}
+
+.territory-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    fill: rgba(255, 255, 255, 0.7);
+    pointer-events: none;
+}
+
+.territory-armies {
+    font-size: 14px;
+    font-weight: 700;
+    fill: #fff;
+    pointer-events: none;
+}

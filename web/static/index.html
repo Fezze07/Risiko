@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RISIKO - Fezze</title>
+    <link rel="stylesheet" href="/static/css/variables.css">
+    <link rel="stylesheet" href="/static/css/base.css">
+    <link rel="stylesheet" href="/static/css/layout.css">
+    <link rel="stylesheet" href="/static/css/components.css">
+    <link rel="stylesheet" href="/static/css/board.css">
+    <link rel="stylesheet" href="/static/css/panels.css">
+    <link rel="stylesheet" href="/static/css/overlays.css">
+</head>
+
+<body>
+
+    <div id="app-container">
+
+        <!-- HEADER -->
+        <header class="header-bar">
+            <div class="logo-section">
+                <h1>RISIKO</h1>
+            </div>
+            <div class="status-indicators">
+                <div class="status-item">
+                    <div class="status-dot active"></div>
+                    <span>SYSTEM ONLINE</span>
+                </div>
+                <div class="status-item">
+                    <span>TURN:</span> <span id="turn-info">0</span>
+                </div>
+                <div class="status-item">
+                    <span>PHASE:</span> <span id="phase-value">INIT</span>
+                </div>
+                <div class="status-item" id="connection-status">
+                    <div class="status-dot"></div>
+                </div>
+            </div>
+        </header>
+
+        <!-- CONTENT WRAPPER -->
+        <div class="content-wrapper">
+
+            <!-- LEFT PANEL: DETAILS + CONTROLS -->
+            <aside class="left-panel">
+                <div class="panel-section">
+                    <h3>Active Mission</h3>
+                    <div class="mission-box" id="mission-info">
+                        Initializing mission parameters...
+                    </div>
+                </div>
+
+                <div class="panel-section" id="armies-info">
+                    <h3>Reinforcements</h3>
+                    <div class="score-card p1">
+                        <span>DEPLOYABLE</span>
+                        <span id="armies-count" class="score-value">0</span>
+                    </div>
+                </div>
+
+                <!-- CONTROLS MOVED HERE -->
+                <div class="panel-section">
+                    <h3>Tactical Controls</h3>
+                    <div class="control-group">
+                        <span class="control-label">Source</span>
+                        <div class="selection-box" id="sel-src">—</div>
+                    </div>
+
+                    <div class="control-group">
+                        <span class="control-label">Target</span>
+                        <div class="selection-box" id="sel-dest">—</div>
+                    </div>
+
+                    <div class="control-group">
+                        <span class="control-label">Force Deployment</span>
+                        <div class="army-stepper">
+                            <button id="btn-qty-minus" class="stepper-btn">−</button>
+                            <div id="qty-display" class="stepper-value">1 🪖</div>
+                            <button id="btn-qty-plus" class="stepper-btn">+</button>
+                        </div>
+                    </div>
+
+                    <div class="action-buttons">
+                        <button id="btn-send" class="btn-cyber" disabled>EXECUTE</button>
+                        <div style="display: flex; gap: 8px;">
+                            <button id="btn-pass" class="btn-cyber secondary" disabled>PASS</button>
+                            <button id="btn-clear" class="btn-cyber secondary">RESET</button>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- CENTER PANEL: SCORES + MAP -->
+            <section class="center-panel">
+                <!-- SCORES (REWARD) MOVED HERE -->
+                <div class="stats-bar">
+                    <div class="score-card p1">
+                        <span>PLAYER 1</span>
+                        <span id="score-p1" class="score-value">0</span>
+                    </div>
+                    <div class="score-card p2">
+                        <span>AI AGENT</span>
+                        <span id="score-p2" class="score-value">0</span>
+                    </div>
+                </div>
+
+                <!-- MAIN: MAP -->
+                <main class="main-board">
+                    <div id="phase-prompt" class="phase-prompt hidden">
+                        <div class="prompt-content">
+                            <div class="prompt-title" id="prompt-title">PHASE START</div>
+                            <div class="prompt-text" id="prompt-text">Awaiting tactical data...</div>
+                        </div>
+                    </div>
+                    <svg id="board-svg" preserveAspectRatio="xMidYMid meet"></svg>
+
+                    <!-- Zoom Controls -->
+                    <div class="zoom-controls">
+                        <button id="btn-zoom-in" title="Zoom In">+</button>
+                        <button id="btn-zoom-reset" title="Reset">100%</button>
+                        <button id="btn-zoom-out" title="Zoom Out">-</button>
+                    </div>
+
+                    <div id="ai-thinking-overlay" class="hidden">
+                        <span class="blink">●</span> AI CALCULATING STRATEGY...
+                    </div>
+                </main>
+            </section>
+
+            <!-- RIGHT PANEL: LOGS -->
+            <aside class="right-panel">
+                <section class="log-panel"
+                    style="height: 100%; max-height: none; border: none; background: transparent;">
+                    <div class="log-header">Battle Feed</div>
+                    <div id="log-container">
+                        <!-- Log entries will be injected here -->
+                    </div>
+                </section>
+            </aside>
+        </div>
+
+    </div>
+
+    <!-- MODALS -->
+    <div id="game-over-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <h2 id="game-over-title">GAME OVER</h2>
+            <div id="game-result-scores" class="modal-scores">
+                <div class="modal-score-item">
+                    <span>PLAYER 1</span>
+                    <span id="p1-final-reward" class="score-value">0</span>
+                </div>
+                <div class="modal-score-item">
+                    <span>AI AGENT</span>
+                    <span id="p2-final-reward" class="score-value">0</span>
+                </div>
+            </div>
+            <p id="game-over-msg" style="margin-bottom: 24px;">Mission Report</p>
+            <button class="btn-cyber" onclick="location.reload()">RE-INITIALIZE</button>
+        </div>
+    </div>
+    <div id="battle-modal" class="modal-overlay hidden">
+        <div class="modal battle-modal-content">
+            <h2 class="battle-title">COMBAT REPORT</h2>
+            <div class="battle-arena">
+                <div class="battle-side attacker">
+                    <span class="side-label">ATTACKER</span>
+                    <div id="dice-attacker" class="dice-container"></div>
+                </div>
+                <div class="battle-vs">VS</div>
+                <div class="battle-side defender">
+                    <span class="side-label">DEFENDER</span>
+                    <div id="dice-defender" class="dice-container"></div>
+                </div>
+            </div>
+            <button class="btn-cyber" onclick="document.getElementById('battle-modal').classList.add('hidden')">CLOSE
+                DATA-STREAM</button>
+        </div>
+    </div>
+
+    <script type="module" src="/static/js/main.js"></script>
+</body>
+
+</html>

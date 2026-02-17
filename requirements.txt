@@ -1,0 +1,6 @@
+numpy
+colorama
+pytest>=8.0
+fastapi
+uvicorn[standard]
+websockets

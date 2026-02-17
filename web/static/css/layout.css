@@ -1,0 +1,56 @@
+#app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    gap: 12px;
+    padding: 12px;
+    overflow: hidden;
+}
+
+.content-wrapper {
+    display: flex;
+    flex-direction: row;
+    gap: 12px;
+    height: 100%;
+    overflow: hidden;
+    min-width: 0;
+}
+
+.left-panel {
+    width: 320px;
+    min-width: 250px;
+    max-width: 400px;
+    resize: horizontal;
+    overflow: auto;
+    background: var(--bg-panel);
+    border: var(--border-thin);
+    border-radius: var(--radius-md);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    flex-shrink: 0;
+}
+
+.center-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.right-panel {
+    width: 300px;
+    min-width: 200px;
+    max-width: 450px;
+    resize: horizontal;
+    background: var(--bg-panel);
+    border: var(--border-thin);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow: hidden;
+}

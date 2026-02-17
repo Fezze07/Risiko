@@ -1,0 +1,155 @@
+/* Header spanning full width */
+.header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-panel);
+    border: var(--border-thin);
+    backdrop-filter: blur(10px);
+    border-radius: var(--radius-md);
+    padding: 0 24px;
+    height: 60px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    flex-shrink: 0;
+}
+
+.logo-section h1 {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    background: linear-gradient(90deg, #fff, var(--primary-blue));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.status-indicators {
+    display: flex;
+    gap: 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-muted);
+}
+
+.status-item span {
+    color: var(--text-highlight);
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+
+.status-dot.active {
+    background: var(--accent-green);
+    box-shadow: 0 0 8px var(--accent-green);
+}
+
+/* Common Panel Styling */
+.panel-section h3 {
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    padding-bottom: 8px;
+}
+
+.score-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-surface);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    border-left: 3px solid transparent;
+}
+
+.score-card.p1 {
+    border-color: var(--p1-color);
+}
+
+.score-card.p2 {
+    border-color: var(--accent-red);
+}
+
+.score-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 700;
+}
+
+/* Stats Bar (Top of Center) */
+.stats-bar {
+    display: flex;
+    gap: 12px;
+    height: 60px;
+    flex-shrink: 0;
+}
+
+.stats-bar .score-card {
+    flex: 1;
+    margin-bottom: 0;
+    height: 100%;
+    justify-content: center;
+    gap: 20px;
+    background: var(--bg-panel);
+    border: var(--border-thin);
+}
+
+.stats-bar .score-card.p1 {
+    border-left: 4px solid var(--p1-color);
+}
+
+.stats-bar .score-card.p2 {
+    border-left: 4px solid var(--p2-color);
+}
+
+/* Mission Box */
+.mission-box {
+    background: rgba(37, 140, 244, 0.1);
+    border: 1px dashed var(--primary-blue);
+    padding: 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-highlight);
+}
+
+/* Control Group (UI sections in panels) */
+.control-group {
+    background: var(--bg-surface);
+    padding: 16px;
+    border-radius: var(--radius-sm);
+}
+
+.control-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: block;
+}
+
+.selection-box {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    color: var(--text-highlight);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 4px;
+    display: flex;
+    justify-content: space-between;
+}
