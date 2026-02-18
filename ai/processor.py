@@ -101,6 +101,15 @@ class Processor:
                 for t_id in my_territories
                 if board.territories[t_id].armies < Config.GAME["MAX_ARMIES_PER_TERRITORY"]
             ]
+            stack_threshold = Config.REWARD.get("REINFORCE_STACK_THRESHOLD", 0)
+            if stack_threshold:
+                preferred_targets = [
+                    t_id
+                    for t_id in valid_targets
+                    if board.territories[t_id].armies < stack_threshold
+                ]
+                if preferred_targets:
+                    valid_targets = preferred_targets
             if not valid_targets:
                 return {"type": "PASS", "src": 0, "dest": 0, "qty": 0}
             idx = int(raw_src * len(valid_targets))
@@ -113,7 +122,8 @@ class Processor:
             }
 
         elif current_phase == "ATTACK":
-            if raw_decision > 0.4:
+            attack_threshold = Config.NN.get("ATTACK_DECISION_THRESHOLD", 0.4)
+            if raw_decision > attack_threshold:
                 # Filtriamo i territori da cui può partire un attacco (miei e con truppe > 1)
                 valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
 
@@ -128,6 +138,11 @@ class Processor:
                         # Scegliamo il bersaglio tra i nemici confinanti
                         idx_d = int(raw_dest * len(enemies))
                         dest_id = enemies[min(idx_d, len(enemies) - 1)]
+                        attacker_armies = board.territories[src_id].armies
+                        defender_armies = board.territories[dest_id].armies
+                        min_ratio = Config.NN.get("ATTACK_MIN_RATIO", 1.0)
+                        if attacker_armies / max(1, defender_armies) < min_ratio:
+                            return {"type": "PASS", "src": 0, "dest": 0, "qty": 0}
                         action = {
                             "type": "ATTACK",
                             "src": src_id,
@@ -144,7 +159,8 @@ class Processor:
             }
 
         elif current_phase == "MANEUVER":
-            if raw_decision > 0.5:
+            maneuver_threshold = Config.NN.get("MANEUVER_DECISION_THRESHOLD", 0.5)
+            if raw_decision > maneuver_threshold:
                 # Filtriamo sorgenti valide (miei territori con truppe > 1)
                 valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
 
@@ -165,3 +181,9 @@ class Processor:
                         }
 
         return action
+
+
+
+
+
+

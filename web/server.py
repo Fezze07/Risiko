@@ -20,12 +20,16 @@ app.add_middleware(
 )
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
-app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/web/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 @app.get("/")
 async def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
+
+@app.get("/app")
+async def app_page():
+    return FileResponse(str(STATIC_DIR / "app.html"))
 
 @app.websocket("/ws/game")
 async def ws_game(ws: WebSocket):

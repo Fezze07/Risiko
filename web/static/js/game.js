@@ -1,15 +1,35 @@
 import { gameState } from "./state.js";
-import { CONSTANTS } from "./constants.js";
-import { DOM, addLog, updateUIState, handleLog, handleReinforceInfo, handleGameOver, updateQuantityUI, showAiOverlay, applySelectionHighlights, updateSendButton, clearSelection, showBattleOverlay, showPhaseAlert, hidePhaseAlert } from "./ui.js";
-import { renderBoard, updateBoardVisuals } from "./board.js";
+import {
+    DOM,
+    addLog,
+    applySelectionHighlights,
+    clearSelection,
+    handleGameOver,
+    handleLog,
+    handleReinforceInfo,
+    hidePhaseAlert,
+    setModeUI,
+    showAiOverlay,
+    showBattleOverlay,
+    showPhaseAlert,
+    syncControlState,
+    updateQuantityUI,
+    updateSendButton,
+    updateSpeedLabel,
+    updateUIState,
+} from "./ui.js";
+import { renderBoard, updateBoardVisuals, flashTerritory } from "./board.js";
 
-// ---- Helpers ----
 export function getTerritoryById(id) {
     if (!gameState.boardData || !gameState.boardData.territories) return null;
-    return gameState.boardData.territories.find(t => t.id === id) || null;
+    return gameState.boardData.territories.find((t) => t.id === id) || null;
 }
 
 export function triggerPhaseAlert() {
+    if (gameState.mode !== "PLAY") {
+        hidePhaseAlert();
+        return;
+    }
     if (gameState.currentPlayer !== 1 || gameState.isAiPlaying || gameState.isGameOver) {
         hidePhaseAlert();
         return;
@@ -18,18 +38,19 @@ export function triggerPhaseAlert() {
     const phase = gameState.currentPhase;
     let title = "OPERAZIONE ATTIVA";
     let text = "";
-
     switch (phase) {
-        case "INITIAL_PLACEMENT":
-            const atpInit = parseInt(DOM.armiesCount.textContent, 10) || 0;
+        case "INITIAL_PLACEMENT": {
+            const n = parseInt(DOM.armiesCount.textContent, 10) || 0;
             title = "FASE: SCHIERAMENTO";
-            text = `Posiziona ${atpInit} armate iniziali`;
+            text = `Posiziona ${n} armate iniziali`;
             break;
-        case "REINFORCE":
-            const atp = parseInt(DOM.armiesCount.textContent, 10) || 0;
+        }
+        case "REINFORCE": {
+            const n = parseInt(DOM.armiesCount.textContent, 10) || 0;
             title = "FASE: RINFORZI";
-            text = `Posiziona ${atp} armate sui tuoi territori`;
+            text = `Posiziona ${n} armate sui tuoi territori`;
             break;
+        }
         case "ATTACK":
             title = "FASE: ATTACCO";
             text = "Seleziona un tuo territorio e un nemico adiacente";
@@ -40,19 +61,118 @@ export function triggerPhaseAlert() {
             break;
         case "MANEUVER":
             title = "FASE: MANOVRA";
-            text = "Sposta le armate tra due tuoi territori collegati";
+            text = "Sposta armate tra territori alleati adiacenti";
             break;
         default:
             hidePhaseAlert();
             return;
     }
-
     showPhaseAlert(title, text);
 }
 
-// ---- Message Handler ----
+function handleInit(msg) {
+    gameState.mode = msg.mode || gameState.mode;
+    gameState.isRunning = !!msg.running;
+    gameState.delayMs = msg.delay_ms || gameState.delayMs;
+    gameState.boardData = msg.board;
+    gameState.continents = msg.continents || [];
+    gameState.currentPlayer = msg.current_player;
+    gameState.currentPhase = msg.phase;
+    gameState.isGameOver = false;
+
+    setModeUI(gameState.mode);
+    updateSpeedLabel(gameState.delayMs);
+    if (DOM.speedSlider) DOM.speedSlider.value = gameState.delayMs;
+
+    updateUIState(msg);
+    renderBoard();
+    const initMessage = gameState.mode === "WATCH" ? "Modalita WATCH avviata" : "Modalita PLAY avviata";
+    addLog(`[INFO] ${initMessage}`, "log-info");
+
+    if (gameState.mode === "PLAY") {
+        if (msg.p1_mission) {
+            DOM.missionInfo.textContent = msg.p1_mission;
+            DOM.missionInfo.title = msg.p1_mission;
+        }
+        triggerPhaseAlert();
+    } else {
+        hidePhaseAlert();
+    }
+    syncControlState();
+}
+
+function handleStateUpdate(msg) {
+    if (msg.board && msg.board.territories) {
+        if (!gameState.boardData) gameState.boardData = msg.board;
+        else gameState.boardData.territories = msg.board.territories;
+    }
+    gameState.currentPlayer = msg.current_player;
+    gameState.currentPhase = msg.phase;
+    if (msg.mode) gameState.mode = msg.mode;
+    if (msg.delay_ms !== undefined) {
+        gameState.delayMs = msg.delay_ms;
+        updateSpeedLabel(gameState.delayMs);
+        if (DOM.speedSlider) DOM.speedSlider.value = gameState.delayMs;
+    }
+    if (msg.running !== undefined) {
+        gameState.isRunning = !!msg.running;
+    }
+
+    updateUIState(msg);
+    updateBoardVisuals();
+
+    if (gameState.mode === "PLAY" && msg.current_player === 2 && msg.running) {
+        showAiOverlay(true);
+    } else {
+        showAiOverlay(false);
+        gameState.isAiPlaying = false;
+    }
+
+    if (gameState.mode === "PLAY") triggerPhaseAlert();
+    else hidePhaseAlert();
+
+    if (msg.extra && msg.extra.rolls_att && msg.extra.rolls_def) {
+        applySelectionHighlights();
+        showBattleOverlay(msg.extra.rolls_att, msg.extra.rolls_def, msg.extra.last_action);
+    }
+    if (msg.extra && msg.extra.last_action) {
+        const last = msg.extra.last_action;
+        if (last.type === "REINFORCE") {
+            flashTerritory(last.dest, "flash-reinforce");
+        } else if (last.type === "MANEUVER") {
+            flashTerritory(last.src, "flash-move");
+            flashTerritory(last.dest, "flash-move");
+        } else if (last.type === "POST_ATTACK_MOVE") {
+            flashTerritory(last.src, "flash-post");
+            flashTerritory(last.dest, "flash-post");
+        }
+    }
+    syncControlState();
+}
+
+function handlePostAttackRequired(msg) {
+    addLog(`[INFO] Conquista: scegli spostamento (#${msg.src} -> #${msg.dest})`, "log-info");
+    gameState.currentPhase = "POST_ATTACK_MOVE";
+    DOM.phaseValue.textContent = "POST_ATTACK_MOVE";
+    gameState.selectedSrc = msg.src;
+    gameState.selectedDest = msg.dest;
+
+    const tSrc = getTerritoryById(gameState.selectedSrc);
+    const tDest = getTerritoryById(gameState.selectedDest);
+    DOM.selSrc.textContent = `#${gameState.selectedSrc} (${tSrc ? tSrc.armies : "?"} armies)`;
+    DOM.selDest.textContent = `#${gameState.selectedDest} (${tDest ? tDest.armies : "?"} armies)`;
+    applySelectionHighlights();
+    updateQuantityUI();
+    gameState.currentQty = gameState.maxQty;
+    updateQuantityUI();
+    triggerPhaseAlert();
+}
+
 export function handleMessage(msg) {
     switch (msg.type) {
+        case "ready":
+            addLog("[INFO] Server pronto. Scegli una modalita.", "log-info");
+            break;
         case "init":
             handleInit(msg);
             break;
@@ -60,8 +180,16 @@ export function handleMessage(msg) {
             handleStateUpdate(msg);
             break;
         case "reinforce_info":
-            // This call is now handled by the ui.js handleReinforceInfo, which also calls triggerPhaseAlert
             handleReinforceInfo(msg);
+            break;
+        case "speed_updated":
+            gameState.delayMs = msg.delay_ms;
+            updateSpeedLabel(gameState.delayMs);
+            if (DOM.speedSlider) DOM.speedSlider.value = gameState.delayMs;
+            break;
+        case "mode_status":
+            gameState.isRunning = !!msg.running;
+            syncControlState();
             break;
         case "error":
             addLog(`[ERRORE] ${msg.message}`, "log-error");
@@ -70,9 +198,13 @@ export function handleMessage(msg) {
             handleLog(msg);
             break;
         case "ai_thinking":
-            showAiOverlay(true);
+            if (gameState.mode === "PLAY") showAiOverlay(true);
             break;
         case "ai_done":
+            showAiOverlay(false);
+            gameState.isAiPlaying = false;
+            break;
+        case "runner_stopped":
             showAiOverlay(false);
             gameState.isAiPlaying = false;
             break;
@@ -82,76 +214,30 @@ export function handleMessage(msg) {
         case "game_over":
             handleGameOver(msg);
             break;
+        default:
+            break;
     }
 }
 
-// ---- Init ----
-function handleInit(msg) {
-    gameState.boardData = msg.board;
-    gameState.continents = msg.continents || [];
-    gameState.currentPlayer = msg.current_player;
-    gameState.currentPhase = msg.phase;
-    updateUIState(msg);
-    if (msg.p1_mission) {
-        DOM.missionInfo.textContent = "🎯 " + msg.p1_mission;
-        DOM.missionInfo.title = msg.p1_mission;
-    }
-    renderBoard();
-    addLog("[INFO] Partita inizializzata — Buona fortuna!", "log-info");
-    triggerPhaseAlert();
+export function startMode(mode) {
+    if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
+    gameState.ws.send(JSON.stringify({ command: "START_MODE", mode }));
 }
 
-// ---- State Update ----
-function handleStateUpdate(msg) {
-    if (msg.board && msg.board.territories) {
-        gameState.boardData.territories = msg.board.territories;
-    }
-    gameState.currentPlayer = msg.current_player;
-    gameState.currentPhase = msg.phase;
-    updateUIState(msg);
-    updateBoardVisuals();
-
-    if (!msg.ai_playing) {
-        showAiOverlay(false);
-        gameState.isAiPlaying = false;
-        triggerPhaseAlert();
-    } else {
-        hidePhaseAlert();
-    }
-
-    if (msg.extra && msg.extra.rolls_att && msg.extra.rolls_def) {
-        // Trigger battle overlay if dice info is present
-        applySelectionHighlights();
-        showBattleOverlay(msg.extra.rolls_att, msg.extra.rolls_def);
-    }
+export function sendControl(action) {
+    if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
+    gameState.ws.send(JSON.stringify({ command: "CONTROL", action }));
 }
 
-// ---- Post Attack Move ----
-function handlePostAttackRequired(msg) {
-    addLog(`[INFO] Conquista! Scegli quante truppe spostare (#${msg.src} → #${msg.dest})`, "log-info");
-    gameState.currentPhase = "POST_ATTACK_MOVE";
-    DOM.phaseValue.textContent = "POST_ATTACK_MOVE";
-
-    gameState.selectedSrc = msg.src;
-    gameState.selectedDest = msg.dest;
-
-    const tSrc = getTerritoryById(gameState.selectedSrc);
-    const tDest = getTerritoryById(gameState.selectedDest);
-
-    DOM.selSrc.textContent = `#${gameState.selectedSrc} (${tSrc ? tSrc.armies : "?"} 🪖)`;
-    DOM.selDest.textContent = `#${gameState.selectedDest} (${tDest ? tDest.armies : "?"} 🪖)`;
-
-    applySelectionHighlights();
-
-    // Update UI and sync Quantity
-    updateQuantityUI();
-    gameState.currentQty = gameState.maxQty;
-    updateQuantityUI();
-    triggerPhaseAlert();
+export function setSpeed(delayMs) {
+    if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
+    const clamped = Math.max(100, Math.min(2000, Number(delayMs)));
+    gameState.ws.send(JSON.stringify({ command: "SET_SPEED", delay_ms: clamped }));
 }
 
-// ---- Territory Click ----
 export function onTerritoryClick(id) {
+    if (gameState.mode !== "PLAY") return;
+    if (gameState.isBattleModalOpen) return;
     if (gameState.isAiPlaying || gameState.isGameOver || gameState.currentPlayer !== 1) return;
 
     const t = getTerritoryById(id);
@@ -164,8 +250,8 @@ export function onTerritoryClick(id) {
         }
         gameState.selectedSrc = null;
         gameState.selectedDest = id;
-        DOM.selSrc.textContent = "—";
-        DOM.selDest.textContent = `#${id} (${t.armies} 🪖)`;
+        DOM.selSrc.textContent = "-";
+        DOM.selDest.textContent = `#${id} (${t.armies} armies)`;
     } else if (gameState.currentPhase === "POST_ATTACK_MOVE") {
         return;
     } else {
@@ -176,8 +262,8 @@ export function onTerritoryClick(id) {
             }
             gameState.selectedSrc = id;
             gameState.selectedDest = null;
-            DOM.selSrc.textContent = `#${id} (${t.armies} 🪖)`;
-            DOM.selDest.textContent = "—";
+            DOM.selSrc.textContent = `#${id} (${t.armies} armies)`;
+            DOM.selDest.textContent = "-";
         } else if (gameState.selectedDest === null) {
             if (gameState.currentPhase === "ATTACK" && t.owner === 1) {
                 addLog("[ERRORE] Non puoi attaccare un tuo territorio", "log-error");
@@ -188,18 +274,13 @@ export function onTerritoryClick(id) {
                 return;
             }
             gameState.selectedDest = id;
-            DOM.selDest.textContent = `#${id} (${t.armies} 🪖)`;
+            DOM.selDest.textContent = `#${id} (${t.armies} armies)`;
         } else {
-            // Stricter check: only allow selecting our territory as source
-            if (t.owner !== 1) {
-                // Do nothing if it's not our territory
-                return;
-            }
-
+            if (t.owner !== 1) return;
             gameState.selectedSrc = id;
             gameState.selectedDest = null;
-            DOM.selSrc.textContent = `#${id} (${t.armies} 🪖)`;
-            DOM.selDest.textContent = "—";
+            DOM.selSrc.textContent = `#${id} (${t.armies} armies)`;
+            DOM.selDest.textContent = "-";
         }
     }
 
@@ -208,35 +289,32 @@ export function onTerritoryClick(id) {
     updateQuantityUI();
     gameState.currentQty = gameState.maxQty;
     updateQuantityUI();
-
     if (gameState.currentPhase === "REINFORCE" || gameState.currentPhase === "INITIAL_PLACEMENT") triggerPhaseAlert();
 }
 
-// ---- Send Action ----
 export function sendAction() {
     if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
+    if (gameState.mode !== "PLAY") return;
+    if (gameState.isBattleModalOpen) return;
 
     let qty = 1.0;
     let msg = {};
-
     if (gameState.currentPhase === "REINFORCE" || gameState.currentPhase === "INITIAL_PLACEMENT") {
         const atp = parseInt(DOM.armiesCount.textContent, 10) || 1;
         qty = gameState.currentQty / atp;
-        msg = { action_type: "REINFORCE", dest: gameState.selectedDest, qty: qty };
+        msg = { action_type: "REINFORCE", dest: gameState.selectedDest, qty };
     } else if (gameState.currentPhase === "POST_ATTACK_MOVE") {
         const t = getTerritoryById(gameState.selectedSrc);
-        const totalMovable = (t && t.armies > 1) ? (t.armies - 1) : 1;
+        const totalMovable = t && t.armies > 1 ? t.armies - 1 : 1;
         qty = gameState.currentQty / totalMovable;
-        msg = { action_type: "POST_ATTACK_MOVE", qty: qty };
+        msg = { action_type: "POST_ATTACK_MOVE", qty };
     } else if (gameState.currentPhase === "ATTACK") {
         if (gameState.selectedSrc === null || gameState.selectedDest === null) return;
         msg = { action_type: "ATTACK", src: gameState.selectedSrc, dest: gameState.selectedDest };
     } else if (gameState.currentPhase === "MANEUVER") {
         const t = getTerritoryById(gameState.selectedSrc);
-        if (t && t.armies > 1) {
-            qty = gameState.currentQty / (t.armies - 1);
-        }
-        msg = { action_type: "MANEUVER", src: gameState.selectedSrc, dest: gameState.selectedDest, qty: qty };
+        if (t && t.armies > 1) qty = gameState.currentQty / (t.armies - 1);
+        msg = { action_type: "MANEUVER", src: gameState.selectedSrc, dest: gameState.selectedDest, qty };
     }
 
     gameState.ws.send(JSON.stringify(msg));
@@ -245,6 +323,8 @@ export function sendAction() {
 
 export function sendPass() {
     if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
+    if (gameState.mode !== "PLAY") return;
+    if (gameState.isBattleModalOpen) return;
     if (gameState.isAiPlaying || gameState.isGameOver || gameState.currentPlayer !== 1) return;
     gameState.ws.send(JSON.stringify({ action_type: "PASS" }));
     clearSelection();

@@ -6,9 +6,7 @@ class Config:
     # ⚙️ UTILS & DEBUG
     # =========================================
     DEBUG: Dict[str, Any] = {
-        "LONG_SESSION": True,
-        "WATCH_MATCH": #True
-                       False
+        "LONG_SESSION": True
     }
     # =========================================
     # 🌍 GAME SETTINGS (Il Mondo Fisico)
@@ -64,7 +62,10 @@ class Config:
         # L'input sarà: (Num Territori * 3) -> Stato, Armate, Minaccia
         # L'output sarà: [Azione, Sorgente, Destinazione, Quantità]
         "OUTPUT_SIZE": 4,
-        "EPSILON-GREEDY": 0.05
+        "EPSILON-GREEDY": 0.05,
+        "ATTACK_DECISION_THRESHOLD": 0.6,
+        "MANEUVER_DECISION_THRESHOLD": 0.6,
+        "ATTACK_MIN_RATIO": 1.15
     }
 
     # =========================================
@@ -150,3 +151,4 @@ class Config:
         "STALEMATE_PENALTY": -30,
         "GAME_LENGTH_PENALTY": -2,
     }
+

@@ -132,7 +132,7 @@ export function renderBoard() {
         ownerText.setAttribute("y", t.y + CONSTANTS.CELL_H - 10);
         ownerText.setAttribute("text-anchor", "middle");
         ownerText.setAttribute("class", "territory-owner-icon");
-        ownerText.textContent = t.owner === 1 ? "🔵 Tu" : t.owner === 2 ? "🔴 AI" : "—";
+        ownerText.textContent = t.owner === 1 ? "P1" : t.owner === 2 ? "P2" : "-";
         ownerText.style.fill = t.owner === 1 ? "#60a5fa" : t.owner === 2 ? "#f87171" : "#64748b";
         ownerText.style.fontSize = "10px";
         ownerText.style.fontWeight = "600";
@@ -174,7 +174,7 @@ export function updateBoardVisuals() {
 
         const ownerEl = g.querySelector(".territory-owner-icon");
         if (ownerEl) {
-            ownerEl.textContent = t.owner === 1 ? "🔵 Tu" : t.owner === 2 ? "🔴 AI" : "—";
+            ownerEl.textContent = t.owner === 1 ? "P1" : t.owner === 2 ? "P2" : "-";
             ownerEl.style.fill = t.owner === 1 ? "#60a5fa" : t.owner === 2 ? "#f87171" : "#64748b";
         }
     });
@@ -190,3 +190,30 @@ export function updateZoom() {
         layer.style.transformOrigin = "center";
     }
 }
+
+export function flashTerritory(id, className) {
+    if (id === undefined || id === null) return;
+    const rect = document.querySelector(`.territory-cell[data-id="${id}"]`);
+    const group = document.querySelector(`.territory-group[data-id="${id}"]`);
+    if (!rect) return;
+    const pulseClass = className.replace("flash-", "pulse-");
+    rect.classList.remove(className);
+    if (group) {
+        group.classList.remove(className);
+        group.classList.remove(pulseClass);
+    }
+    void rect.offsetWidth;
+    rect.classList.add(className);
+    if (group) {
+        group.classList.add(className);
+        group.classList.add(pulseClass);
+    }
+    setTimeout(() => {
+        rect.classList.remove(className);
+        if (group) {
+            group.classList.remove(className);
+            group.classList.remove(pulseClass);
+        }
+    }, 1100);
+}
+

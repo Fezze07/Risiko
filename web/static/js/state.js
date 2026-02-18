@@ -2,6 +2,9 @@ export const gameState = {
     ws: null,
     boardData: null,
     continents: [],
+    mode: null,
+    isRunning: false,
+    delayMs: 2000,
     currentPlayer: 1,
     currentPhase: "REINFORCE",
     selectedSrc: null,
@@ -15,5 +18,7 @@ export const gameState = {
     startPanX: 0,
     startPanY: 0,
     currentQty: 1,
-    maxQty: 1
+    maxQty: 1,
+    isBattleModalOpen: false,
+    pauseForModal: false
 };

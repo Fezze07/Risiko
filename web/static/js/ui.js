@@ -1,8 +1,6 @@
 import { gameState } from "./state.js";
-import { CONSTANTS } from "./constants.js";
-import { getTerritoryById } from "./game.js";
+import { getTerritoryById, triggerPhaseAlert } from "./game.js";
 
-// DOM Elements
 export const DOM = {
     boardSvg: document.getElementById("board-svg"),
     selSrc: document.getElementById("sel-src"),
@@ -30,25 +28,73 @@ export const DOM = {
     btnZoomOut: document.getElementById("btn-zoom-out"),
     btnZoomReset: document.getElementById("btn-zoom-reset"),
     battleModal: document.getElementById("battle-modal"),
+    battleClose: document.getElementById("btn-battle-close"),
+    battleAttackerLabel: document.getElementById("battle-attacker-label"),
+    battleDefenderLabel: document.getElementById("battle-defender-label"),
+    battleRoute: document.getElementById("battle-route"),
     diceAtt: document.getElementById("dice-attacker"),
     diceDef: document.getElementById("dice-defender"),
     phasePrompt: document.getElementById("phase-prompt"),
     promptTitle: document.getElementById("prompt-title"),
     promptText: document.getElementById("prompt-text"),
     p1FinalReward: document.getElementById("p1-final-reward"),
-    p2FinalReward: document.getElementById("p2-final-reward")
+    p2FinalReward: document.getElementById("p2-final-reward"),
+    landingOverlay: document.getElementById("landing-overlay"),
+    btnModePlay: document.getElementById("btn-mode-play"),
+    btnModeWatch: document.getElementById("btn-mode-watch"),
+    controlBar: document.getElementById("control-bar"),
+    btnCtrlPlay: document.getElementById("btn-ctrl-play"),
+    btnCtrlPause: document.getElementById("btn-ctrl-pause"),
+    btnCtrlReset: document.getElementById("btn-ctrl-reset"),
+    speedSlider: document.getElementById("speed-slider"),
+    speedValue: document.getElementById("speed-value"),
+    scoreP1Label: document.getElementById("score-p1-label"),
+    scoreP2Label: document.getElementById("score-p2-label"),
 };
 
-// ... existing code ...
+export function setModeUI(mode) {
+    if (!mode) {
+        return;
+    }
+    if (DOM.landingOverlay) {
+        DOM.landingOverlay.classList.add("hidden");
+    }
+    if (DOM.controlBar) {
+        DOM.controlBar.classList.remove("hidden");
+    }
+    if (mode === "WATCH") {
+        if (DOM.scoreP1Label) DOM.scoreP1Label.textContent = "AI 1";
+        if (DOM.scoreP2Label) DOM.scoreP2Label.textContent = "AI 2";
+        if (DOM.missionInfo) DOM.missionInfo.textContent = "Spectator mode: AI vs AI";
+    } else {
+        if (DOM.scoreP1Label) DOM.scoreP1Label.textContent = "PLAYER 1";
+        if (DOM.scoreP2Label) DOM.scoreP2Label.textContent = "AI AGENT";
+    }
+    syncControlState();
+}
 
-export function showBattleOverlay(rollsAtt, rollsDef) {
+export function syncControlState() {
+    if (!DOM.btnCtrlPlay || !DOM.btnCtrlPause) return;
+    DOM.btnCtrlPlay.disabled = gameState.isRunning;
+    DOM.btnCtrlPause.disabled = !gameState.isRunning;
+}
+
+export function updateSpeedLabel(ms) {
+    if (DOM.speedValue) {
+        DOM.speedValue.textContent = `${ms} ms`;
+    }
+}
+
+export function showBattleOverlay(rollsAtt, rollsDef, meta) {
     if (!rollsAtt || !rollsDef) return;
-
-    // Clear previous dice
+    if (gameState.isBattleModalOpen) return;
+    gameState.isBattleModalOpen = true;
+    if (gameState.ws && gameState.ws.readyState === WebSocket.OPEN) {
+        gameState.pauseForModal = true;
+        gameState.ws.send(JSON.stringify({ command: "CONTROL", action: "PAUSE" }));
+    }
     DOM.diceAtt.innerHTML = "";
     DOM.diceDef.innerHTML = "";
-
-    // Add attacker dice
     rollsAtt.forEach((val, i) => {
         const die = document.createElement("div");
         die.className = "die att";
@@ -56,8 +102,6 @@ export function showBattleOverlay(rollsAtt, rollsDef) {
         die.textContent = val;
         DOM.diceAtt.appendChild(die);
     });
-
-    // Add defender dice
     rollsDef.forEach((val, i) => {
         const die = document.createElement("div");
         die.className = "die def";
@@ -65,26 +109,39 @@ export function showBattleOverlay(rollsAtt, rollsDef) {
         die.textContent = val;
         DOM.diceDef.appendChild(die);
     });
-
+    if (meta && DOM.battleAttackerLabel && DOM.battleDefenderLabel && DOM.battleRoute) {
+        const att = meta.player === 1 ? "P1" : "P2";
+        const def = meta.player === 1 ? "P2" : "P1";
+        DOM.battleAttackerLabel.textContent = `Attacker ${att}`;
+        DOM.battleDefenderLabel.textContent = `Defender ${def}`;
+        const src = meta.src !== undefined ? `#${meta.src}` : "?";
+        const dest = meta.dest !== undefined ? `#${meta.dest}` : "?";
+        DOM.battleRoute.textContent = `${src} -> ${dest}`;
+    }
     DOM.battleModal.classList.remove("hidden");
+}
+
+export function closeBattleOverlay() {
+    if (!gameState.isBattleModalOpen) return;
+    gameState.isBattleModalOpen = false;
+    DOM.battleModal.classList.add("hidden");
+    if (gameState.pauseForModal && gameState.ws && gameState.ws.readyState === WebSocket.OPEN) {
+        gameState.pauseForModal = false;
+        gameState.ws.send(JSON.stringify({ command: "CONTROL", action: "PLAY" }));
+    }
 }
 
 export function showPhaseAlert(title, text) {
     if (!DOM.phasePrompt) return;
-
     DOM.promptTitle.textContent = title;
     DOM.promptText.textContent = text;
     DOM.phasePrompt.classList.remove("hidden");
-
-    // Auto-hide after some time if it's just a transition
-    // But for now, we might want it persistent until the phase changes
 }
 
 export function hidePhaseAlert() {
     if (DOM.phasePrompt) DOM.phasePrompt.classList.add("hidden");
 }
 
-// ---- Log ----
 export function addLog(text, className) {
     const el = document.createElement("div");
     el.className = "log-entry " + (className || "");
@@ -107,7 +164,6 @@ export function handleLog(msg) {
     addLog(entry, cls);
 }
 
-// ---- AI Overlay ----
 export function showAiOverlay(show) {
     if (show) {
         DOM.aiOverlay.classList.remove("hidden");
@@ -117,7 +173,6 @@ export function showAiOverlay(show) {
     }
 }
 
-// ---- UI State ----
 export function updateUIState(msg) {
     DOM.phaseValue.textContent = msg.phase || gameState.currentPhase;
     DOM.turnInfo.textContent = `Turno: ${msg.turn || 0}`;
@@ -125,31 +180,37 @@ export function updateUIState(msg) {
     if (msg.p2_score !== undefined) DOM.scoreP2.textContent = msg.p2_score;
 
     const atp = msg.armies_to_place || 0;
-    if (atp > 0 && gameState.currentPlayer === 1 && (gameState.currentPhase === "REINFORCE" || gameState.currentPhase === "INITIAL_PLACEMENT")) {
+    const canShowReinforce = gameState.mode === "PLAY" && gameState.currentPlayer === 1;
+    if (atp > 0 && canShowReinforce && (gameState.currentPhase === "REINFORCE" || gameState.currentPhase === "INITIAL_PLACEMENT")) {
         DOM.armiesInfo.classList.remove("hidden");
         DOM.armiesCount.textContent = atp;
     } else {
         DOM.armiesInfo.classList.add("hidden");
     }
 
-    const myTurn = gameState.currentPlayer === 1 && !gameState.isAiPlaying && !gameState.isGameOver;
+    const myTurn = gameState.mode === "PLAY" && gameState.currentPlayer === 1 && !gameState.isAiPlaying && !gameState.isGameOver && !gameState.isBattleModalOpen;
+    const allowTactical = gameState.mode === "PLAY";
     DOM.btnPass.disabled = !myTurn;
+    DOM.btnSend.disabled = !allowTactical;
+    DOM.btnClear.disabled = !allowTactical;
+    if (DOM.btnQtyMinus) DOM.btnQtyMinus.disabled = !allowTactical;
+    if (DOM.btnQtyPlus) DOM.btnQtyPlus.disabled = !allowTactical;
     updateSendButton();
     updateQuantityUI();
+    syncControlState();
 }
 
-// ---- Reinforce Info ----
 export function handleReinforceInfo(msg) {
     const n = msg.armies_to_place || 0;
+    if (gameState.mode !== "PLAY") {
+        DOM.armiesInfo.classList.add("hidden");
+        return;
+    }
     if (n > 0) {
         DOM.armiesInfo.classList.remove("hidden");
         DOM.armiesCount.textContent = n;
         addLog(`[INFO] Hai ${n} truppe da piazzare`, "log-info");
-
-        // Import triggerPhaseAlert from game.js and call it
-        import("./game.js").then(module => {
-            module.triggerPhaseAlert();
-        });
+        triggerPhaseAlert();
     } else {
         DOM.armiesInfo.classList.add("hidden");
     }
@@ -157,21 +218,28 @@ export function handleReinforceInfo(msg) {
 
 export function handleGameOver(msg) {
     gameState.isGameOver = true;
+    gameState.isRunning = false;
     DOM.gameOverModal.classList.remove("hidden");
-    const winnerDisplay = msg.winner === 1 ? "HAI VINTO!" : "AI AGENT VINCE";
+    let winnerDisplay = "GAME OVER";
+    if (gameState.mode === "WATCH") {
+        winnerDisplay = msg.winner === 1 ? "AI 1 VINCE" : msg.winner === 2 ? "AI 2 VINCE" : "PAREGGIO";
+    } else {
+        winnerDisplay = msg.winner === 1 ? "HAI VINTO!" : msg.winner === 2 ? "AI AGENT VINCE" : "PAREGGIO";
+    }
     DOM.gameOverTitle.textContent = winnerDisplay;
     DOM.gameOverMsg.textContent = `Risultato missione: ${msg.message}`;
-
     if (msg.p1_score !== undefined) DOM.p1FinalReward.textContent = Math.round(msg.p1_score);
     if (msg.p2_score !== undefined) DOM.p2FinalReward.textContent = Math.round(msg.p2_score);
-
     addLog(`[GAME OVER] Vincitore: Player ${msg.winner}`, "log-info");
+    syncControlState();
 }
 
-// ---- Update Quantity UI ----
 export function updateQuantityUI() {
     const stepperDiv = document.querySelector(".army-stepper");
-
+    if (gameState.mode !== "PLAY") {
+        if (stepperDiv) stepperDiv.style.display = "none";
+        return;
+    }
     if (gameState.currentPhase === "ATTACK") {
         if (stepperDiv) stepperDiv.style.display = "none";
         return;
@@ -186,32 +254,24 @@ export function updateQuantityUI() {
             const t = getTerritoryById(gameState.selectedSrc);
             if (t && t.armies > 1) {
                 newMax = t.armies - 1;
-            } else {
-                newMax = 1;
             }
-        } else {
-            newMax = 1;
         }
     }
 
-    gameState.maxQty = newMax;
-    if (gameState.maxQty < 0) gameState.maxQty = 0;
-
+    gameState.maxQty = Math.max(0, newMax);
     if (gameState.currentQty > gameState.maxQty) gameState.currentQty = gameState.maxQty;
     if (gameState.currentQty < 1 && gameState.maxQty >= 1) gameState.currentQty = 1;
     if (gameState.maxQty < 1) gameState.currentQty = 0;
 
     if (DOM.qtyDisplay) {
-        DOM.qtyDisplay.textContent = gameState.currentQty + " 🪖";
+        DOM.qtyDisplay.textContent = `${gameState.currentQty} armies`;
     }
-
     if (DOM.btnQtyMinus) DOM.btnQtyMinus.disabled = gameState.currentQty <= 1;
     if (DOM.btnQtyPlus) DOM.btnQtyPlus.disabled = gameState.currentQty >= gameState.maxQty;
 }
 
-// ---- Update Send Button ----
 export function updateSendButton() {
-    const myTurn = gameState.currentPlayer === 1 && !gameState.isAiPlaying && !gameState.isGameOver;
+    const myTurn = gameState.mode === "PLAY" && gameState.currentPlayer === 1 && !gameState.isAiPlaying && !gameState.isGameOver;
     if (!myTurn) {
         DOM.btnSend.disabled = true;
         return;
@@ -226,17 +286,14 @@ export function updateSendButton() {
     }
 }
 
-// ---- Selection Highlights ----
 export function applySelectionHighlights() {
-    // 1. Reset everything
-    document.querySelectorAll(".territory-cell").forEach(rect => {
+    document.querySelectorAll(".territory-cell").forEach((rect) => {
         rect.classList.remove("selected-src", "selected-dest");
     });
-    document.querySelectorAll(".territory-group").forEach(g => {
+    document.querySelectorAll(".territory-group").forEach((g) => {
         g.classList.remove("selected");
     });
 
-    // 2. Apply Source highlight & scaling
     if (gameState.selectedSrc !== null) {
         const rect = document.querySelector(`.territory-cell[data-id="${gameState.selectedSrc}"]`);
         if (rect) rect.classList.add("selected-src");
@@ -244,7 +301,6 @@ export function applySelectionHighlights() {
         if (group) group.classList.add("selected");
     }
 
-    // 3. Apply Destination highlight & scaling
     if (gameState.selectedDest !== null) {
         const rect = document.querySelector(`.territory-cell[data-id="${gameState.selectedDest}"]`);
         if (rect) rect.classList.add("selected-dest");
@@ -252,7 +308,6 @@ export function applySelectionHighlights() {
         if (group) group.classList.add("selected");
     }
 
-    // 4. Highlight connections for Attack Phase
     if (gameState.currentPhase === "ATTACK") {
         highlightConnections(gameState.selectedSrc);
     } else {
@@ -261,7 +316,7 @@ export function applySelectionHighlights() {
 }
 
 export function highlightConnections(srcId) {
-    document.querySelectorAll(".connection-line").forEach(line => {
+    document.querySelectorAll(".connection-line").forEach((line) => {
         const u = line.getAttribute("data-u");
         const v = line.getAttribute("data-v");
         if (srcId !== null && (u === srcId.toString() || v === srcId.toString())) {
@@ -275,8 +330,8 @@ export function highlightConnections(srcId) {
 export function clearSelection() {
     gameState.selectedSrc = null;
     gameState.selectedDest = null;
-    DOM.selSrc.textContent = "—";
-    DOM.selDest.textContent = "—";
+    DOM.selSrc.textContent = "-";
+    DOM.selDest.textContent = "-";
     applySelectionHighlights();
     updateSendButton();
     updateQuantityUI();

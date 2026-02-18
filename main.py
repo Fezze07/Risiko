@@ -12,8 +12,6 @@ from core.environment import RisikoEnvironment
 from utils.human_dataset import load_samples, compute_imitation_bonus
 from utils.parallel_trainer import run_parallel_match
 from utils.trainer_utils import TrainerUtils
-from utils.watch_match_utils import WatchMatchUtils
-from visual.visualizer import Visualizer
 
 
 def parse_args() -> argparse.Namespace:
@@ -30,11 +28,6 @@ def parse_args() -> argparse.Namespace:
         help='Forza la sessione lunga (10^6 generazioni).',
     )
     parser.add_argument(
-        '--watch',
-        action='store_true',
-        help='Attiva la visualizzazione di un match tra i migliori agenti ogni generazione.',
-    )
-    parser.add_argument(
         '--max-workers',
         '-w',
         type=int,
@@ -48,7 +41,6 @@ class Main:
         self,
         *,
         generations: Optional[int],
-        watch_match: bool,
         long_session: bool,
         max_workers: Optional[int],
     ) -> None:
@@ -58,7 +50,6 @@ class Main:
         self.evo_manager: EvolutionManager = EvolutionManager(self.env.board)
         self.max_generations = generations
         self.use_long_session = long_session
-        self.enable_watch_match = watch_match
         worker_count = max_workers or os.cpu_count() or 2
         self.executor = concurrent.futures.ProcessPoolExecutor(max_workers=worker_count)
 
@@ -216,11 +207,6 @@ class Main:
             if is_new_record:
                 print('NUOVO RECORD STORICO REGISTRATO!')
 
-            if self.enable_watch_match or Config.DEBUG['WATCH_MATCH']:
-                sorted_pop = sorted(population, key=lambda x: x.fitness, reverse=True)
-                sfidante = sorted_pop[1]
-                self.watch_match(best_agent, sfidante)
-
             self.evo_manager.save_best_agent('best_agent.pkl')
 
             best_color = Fore.GREEN if best_agent.fitness >= 0 else Fore.RED
@@ -245,66 +231,10 @@ class Main:
             self.evo_manager.evolve()
             generation += 1
 
-    def watch_match(self, agent_p1: Agent, agent_p2: Agent) -> None:
-        print('\nAVVIO MATCH DI OSSERVAZIONE...')
-        self.env.reset()
-        done = False
-        p1_total_reward: int = 0
-        p2_total_reward: int = 0
-        action_log: List[str] = []
-
-        while not done:
-            curr_p = self.env.player_turn
-            phase = self.env.current_phase
-            agent = agent_p1 if curr_p == 1 else agent_p2
-            mission = self.env.p1_mission if curr_p == 1 else self.env.p2_mission
-
-            action = agent.think(self.env.board, curr_p, self.env.current_turn, phase, mission)
-            reward, done, info = self.env.step(action, curr_p)
-
-            if curr_p == 1:
-                p1_total_reward += reward
-                if 'opponent_reward' in info:
-                    p2_total_reward += info['opponent_reward']
-            else:
-                p2_total_reward += reward
-                if 'opponent_reward' in info:
-                    p1_total_reward += info['opponent_reward']
-
-            reason = WatchMatchUtils.get_reward_reason(action['type'], reward, info)
-
-            # Aggiunge info su reward dell'opponente nel log se presente (es. truppe perse)
-            opp_rew = info.get('opponent_reward', 0)
-            if opp_rew != 0:
-                reason += f" | OppRew: {float(opp_rew):>7.2f}"
-
-            log_entry = WatchMatchUtils.format_log_line(curr_p, action, reward, reason)
-            action_log.append(log_entry)
-
-            Visualizer.render_board(
-                self.env.board,
-                self.env.current_turn,
-                phase,
-                curr_p,
-                mission,
-                p1_total_reward,
-                p2_total_reward,
-                action_log,
-            )
-
-            if not done:
-                input('Premi Invio per la prossima mossa...')
-            else:
-                winner, _ = self.env.is_game_over()
-                print(f"\nPARTITA FINITA! Vincitore: Player {winner}")
-                input('\nPremi Invio per tornare al training...')
-
-
 def main() -> None:
     args = parse_args()
     Main(
         generations=args.generations,
-        watch_match=args.watch,
         long_session=args.long_session,
         max_workers=args.max_workers,
     )

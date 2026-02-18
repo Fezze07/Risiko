@@ -6,9 +6,9 @@ from core.environment import RisikoEnvironment
 from ai.agent import Agent
 from utils.trainer_utils import TrainerUtils
 
-# Carica best_agent.pkl per far sfidare il player con il miglior agente
-def build_ai_agent(env: RisikoEnvironment) -> Agent:
-    ai_agent = Agent(env.board, id=2)
+# Carica best_agent.pkl per creare un agente AI.
+def build_ai_agent(env: RisikoEnvironment, agent_id: int = 2) -> Agent:
+    ai_agent = Agent(env.board, id=agent_id)
     # Updated path to dataset folder
     model_path = os.path.join("dataset", "best_agent.pkl")
     saved = TrainerUtils.load_weights(model_path)

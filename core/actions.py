@@ -43,7 +43,7 @@ class ActionHandler:
             for t in board.territories.values()
         )
 
-        extra_info = {'is_frontline': is_frontline}
+        extra_info = {'is_frontline': is_frontline, 'reinforce_qty': to_add}
 
         if is_frontline:
             reward = to_add * Config.REWARD['REINFORCE_STRATEGIC_MULT']
@@ -110,6 +110,12 @@ class ActionHandler:
         elif not other_enemies:
             reward += Config.REWARD['AVOID_RISK_BONUS']
             extra_info['avoid_risk'] = True
+
+        # Penalizza attacchi in svantaggio numerico diretto
+        if t_att.armies <= t_def.armies and not extra_info.get('risky_attack'):
+            reward += Config.REWARD['ATTACK_RISK_PENALTY']
+            extra_info['risky_attack'] = True
+            extra_info['risky_attack_odds'] = True
 
         if t_def.armies <= 0:
             conquered = True
@@ -209,7 +215,8 @@ class ActionHandler:
 
         extra_info = {
             'src_is_frontline': src_is_frontline,
-            'dest_is_frontline': dest_is_frontline
+            'dest_is_frontline': dest_is_frontline,
+            'maneuver_qty': amount
         }
 
         if dest_is_frontline:
@@ -238,7 +245,8 @@ class ActionHandler:
             reward = Config.REWARD['MANEUVER_PENALTY']
             extra_info['maneuver_away_from_front'] = True
 
-        if t_src.armies == 1 and src_is_frontline:
+        # Penalizza solo se dopo lo spostamento il territorio sorgente rimane a fronte
+        if t_src.armies == 1 and self._has_enemy_neighbors(board, player_id, t_src.id):
             reward += Config.REWARD['LEAVE_ONE_ARMY_PENALTY']
             extra_info['left_one_army_src'] = True
 
@@ -255,3 +263,7 @@ class ActionHandler:
         if armies > 3:
             return 3
         return armies - 1
+
+
+
+

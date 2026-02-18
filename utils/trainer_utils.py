@@ -13,8 +13,15 @@ class TrainerUtils:
             path = os.path.join('dataset', filename)
             
         if os.path.exists(path):
-            with open(path, 'rb') as f:
-                return pickle.load(f)
+            if os.path.getsize(path) == 0:
+                print(f"[TrainerUtils] Salto caricamento: {path} è vuoto.")
+                return None
+            try:
+                with open(path, 'rb') as f:
+                    return pickle.load(f)
+            except (EOFError, pickle.UnpicklingError, Exception) as e:
+                print(f"[TrainerUtils] Errore nel caricamento di {path}: {e}")
+                return None
         return None
 
     @staticmethod
