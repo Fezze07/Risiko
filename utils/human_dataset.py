@@ -3,7 +3,7 @@ import os
 import random
 import numpy as np
 from typing import Dict, Any, List, Optional
-from core.config import Config
+from config import Config
 
 
 def _index_to_frac(idx: int, count: int) -> float:

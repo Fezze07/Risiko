@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple
 from core.board import Board
-from core.config import Config
+from config import Config
 from utils.dice import get_random_dice
 
 
@@ -50,14 +50,17 @@ class ActionHandler:
         else:
             reward = to_add * Config.REWARD['REINFORCE_SAFE_MULT']
             if has_frontline_any:
-                reward += Config.REWARD['ATTACK_RISK_PENALTY']
-                extra_info['attack_risk_penalty'] = True
+                reward += Config.REWARD.get('REINFORCE_SAFE_PENALTY', -50)
+                extra_info['reinforce_safe_penalty'] = True
 
-        # Penalizza stacking su territori già molto pieni
+        # Penalizza stacking su territori già molto pieni (progressivo)
         stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
-        if stack_threshold and t_dest.armies >= stack_threshold:
-            reward += Config.REWARD['REINFORCE_STACK_PENALTY']
+        armies_before = t_dest.armies - to_add
+        if stack_threshold and armies_before >= stack_threshold:
+            excess = t_dest.armies - stack_threshold
+            reward += Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
             extra_info['stack_penalty'] = True
+            extra_info['stack_excess'] = excess
 
         return reward, to_add, extra_info
 
@@ -210,9 +213,22 @@ class ActionHandler:
         }
 
         if dest_is_frontline:
-            # Spostamento verso il fronte: Sempre premiato
-            reward = Config.REWARD['MANEUVER_STRATEGIC']
-            extra_info['maneuver_strategic'] = True
+            # Spostamento verso il fronte: premiato solo se non andiamo in over-stacking
+            stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
+            armies_before = t_dest.armies - amount
+            is_stacked_before = stack_threshold and armies_before >= stack_threshold
+            
+            if not is_stacked_before:
+                reward = Config.REWARD['MANEUVER_STRATEGIC']
+                extra_info['maneuver_strategic'] = True
+            else:
+                # Se era già pieno e aggiungiamo ancora, niente bonus e applichiamo malus progressivo
+                reward = Config.REWARD['MANEUVER_PENALTY']
+                extra_info['maneuver_strategic_stacked'] = True
+                excess = t_dest.armies - stack_threshold
+                reward += Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
+                extra_info['stack_penalty'] = True
+                extra_info['stack_excess'] = excess
         elif not src_is_frontline:
             # Safe -> Safe: Inutile spostamento interno
             reward = Config.REWARD['REINFORCE_ARMY']

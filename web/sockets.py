@@ -5,7 +5,7 @@ import os
 from typing import Dict, List, Any, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
-from core.config import Config
+from config import Config
 from core.environment import RisikoEnvironment
 from ai.processor import Processor
 from utils.human_dataset import append_sample, encode_action_target

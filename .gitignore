@@ -1,6 +1,6 @@
 .venv/
 .idea/
-logs/
+tests/
 __pycache__/
 *.pyc
 *.pkl

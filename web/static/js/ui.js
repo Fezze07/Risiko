@@ -162,8 +162,8 @@ export function handleGameOver(msg) {
     DOM.gameOverTitle.textContent = winnerDisplay;
     DOM.gameOverMsg.textContent = `Risultato missione: ${msg.message}`;
 
-    if (msg.p1_reward !== undefined) DOM.p1FinalReward.textContent = Math.round(msg.p1_reward);
-    if (msg.p2_reward !== undefined) DOM.p2FinalReward.textContent = Math.round(msg.p2_reward);
+    if (msg.p1_score !== undefined) DOM.p1FinalReward.textContent = Math.round(msg.p1_score);
+    if (msg.p2_score !== undefined) DOM.p2FinalReward.textContent = Math.round(msg.p2_score);
 
     addLog(`[GAME OVER] Vincitore: Player ${msg.winner}`, "log-info");
 }

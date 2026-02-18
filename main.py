@@ -7,7 +7,7 @@ from colorama import Fore, Style, init
 
 from ai.agent import Agent
 from ai.evolution import EvolutionManager
-from core.config import Config
+from config import Config
 from core.environment import RisikoEnvironment
 from utils.human_dataset import load_samples, compute_imitation_bonus
 from utils.parallel_trainer import run_parallel_match

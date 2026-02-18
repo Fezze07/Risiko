@@ -2,7 +2,7 @@ import numpy as np
 from typing import Dict, List, Any
 
 from core.board import Board
-from core.config import Config
+from config import Config
 
 
 class Processor:

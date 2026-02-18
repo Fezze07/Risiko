@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple
 from core.board import Board
-from core.config import Config
+from config import Config
 
 class ActionValidator:
     @staticmethod

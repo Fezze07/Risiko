@@ -1,7 +1,7 @@
 import math
 import os
 from typing import Dict, List, Any, Tuple
-from core.config import Config
+from config import Config
 from core.environment import RisikoEnvironment
 from ai.agent import Agent
 from utils.trainer_utils import TrainerUtils

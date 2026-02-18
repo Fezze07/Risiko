@@ -1,6 +1,15 @@
 from typing import Dict, Any
 
 class Config:
+    
+    # =========================================
+    # ⚙️ UTILS & DEBUG
+    # =========================================
+    DEBUG: Dict[str, Any] = {
+        "LONG_SESSION": True,
+        "WATCH_MATCH": #True
+                       False
+    }
     # =========================================
     # 🌍 GAME SETTINGS (Il Mondo Fisico)
     # =========================================
@@ -15,7 +24,7 @@ class Config:
         "MIN_BONUS": 1,
         "MIN_REINFORCE_QTY": 0.05,
         "MIN_POST_CONQUEST_MOVE": 2,
-        "INITIAL_PLACEMENT_TOTAL": 15,
+        "INITIAL_PLACEMENT_TOTAL": 10,
         "INITIAL_PLACEMENT_STEP": 3,
         "PHASES": ["INITIAL_PLACEMENT", "REINFORCE", "ATTACK", "POST_ATTACK_MOVE", "MANEUVER"]
     }
@@ -102,50 +111,42 @@ class Config:
         "REINFORCE_ARMY": 0,
         "REINFORCE_STRATEGIC_MULT": 4,
         "REINFORCE_SAFE_MULT": 0,
-        "REINFORCE_STACK_PENALTY": -15,
+        "REINFORCE_SAFE_PENALTY": -15,
+        "REINFORCE_STACK_PENALTY": -25,
         "REINFORCE_STACK_THRESHOLD": 8,
-        "REINFORCE_REPEAT_PENALTY": -20,
+        "REINFORCE_REPEAT_PENALTY": -30,
         "PASS_REPEAT_PENALTY": -13,
         "ARMY_LIMIT_PENALTY": -80,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 50,
+        "CONQUER_TERRITORY": 30,
         "LOSE_TERRITORY": -300,
         "KILL_ENEMY_ARMY": 10,
         "LOSE_ARMY": -8,
-        "ATTACK_RISK_PENALTY": -30,
+        "ATTACK_RISK_PENALTY": -150,
         "AVOID_RISK_BONUS": 15,
-        "LEAVE_ONE_ARMY_PENALTY": -60,
+        "LEAVE_ONE_ARMY_PENALTY": -300,
         "CONQUEST_STREAK_CAP": 3,
         # --- DIFESA / PRESIDIO ---
-        "DEFEND_BONUS": 50,
+        "DEFEND_BONUS": 25,
         "DEFEND_HOLD_TERRITORY": 70,
-        "FRONTLINE_STABLE_BONUS": 55,
-        "FRONTLINE_FORTIFIED_BONUS": 80,
+        "FRONTLINE_STABLE_BONUS": 100,
+        "FRONTLINE_FORTIFIED_BONUS": 150,
         "VALID_SAFE_ACTION_BONUS": 8,
         # --- MANOVRA ---
         "MANEUVER_CORRECTLY": 10,
         "MANEUVER_PENALTY": -40,
         "MANEUVER_STRATEGIC": 60,
         # --- CONTINENTI / CONTROLLO MAPPA ---
-        "HOLD_CONTINENT": 120,
-        "CONQUER_CONTINENT": 500,
+        "HOLD_CONTINENT": 80,
+        "CONQUER_CONTINENT": 150,
         "LOSE_CONTINENT": -2000,
         # --- PROGRESSO VERSO LA VITTORIA ---
         "PROGRESS_TERRITORY_SCALE": 40,
         "PROGRESS_CONTINENT_SCALE": 30,
         # --- ERRORI / STALLO / TEMPO ---
-        "INVALID_MOVE": -50,
+        "INVALID_MOVE": -100,
         "INVALID_MOVE_ATTACK": -200,
         "CONSECUTIVE_INVALID_MOVE": -500,
         "STALEMATE_PENALTY": -30,
-        "GAME_LENGTH_PENALTY": -3,
-    }
-
-    # =========================================
-    # ⚙️ UTILS & DEBUG
-    # =========================================
-    DEBUG: Dict[str, Any] = {
-        "LONG_SESSION": True,
-        "WATCH_MATCH":  #True
-                        False
+        "GAME_LENGTH_PENALTY": -2,
     }

@@ -1,13 +1,14 @@
-# 🎲 Risiko AI - Progetto di Reinforcement Learning
+# 🎲 Risiko AI - Reinforcement Learning & Evolutionary Strategies
 
-Questo progetto implementa un ambiente di **Reinforcement Learning** per addestrare agenti AI a giocare al gioco da tavolo **Risk** (Risiko). Utilizza un **Algoritmo Genetico** (Strategia Evolutiva) per far evolvere una popolazione di Reti Neurali che imparano a giocare attraverso il self-play.
+Questo progetto implementa un ambiente avanzato di **Reinforcement Learning** per addestrare agenti AI a giocare a **Risiko**. Il sistema utilizza un motore evolutivo (Algoritmo Genetico) combinato con tecniche di **Imitation Learning** per sviluppare strategie di gioco sofisticate e realistiche.
 
-## 🧠 Concetti Chiave
+## 🧠 Caratteristiche Principali
 
-- **Algoritmo Genetico**: Gli agenti evolvono nel corso delle generazioni. I più performanti (quelli che vincono o ottengono risultati migliori) si riproducono e subiscono mutazioni.
-- **Rete Neurale**: Ogni agente prende decisioni tramite una Rete Neurale che valuta lo stato della board.
-- **Addestramento Parallelo**: Le partite vengono simulate in parallelo usando `concurrent.futures` per massimizzare l’utilizzo della CPU.
-- **Ambiente Risiko**: Implementazione personalizzata delle regole di Risk, incluse le fasi (Rinforzo, Attacco, Manovra), i Continenti e il lancio dei dadi.
+- **🧬 Motore Evolutivo**: Evoluzione di reti neurali tramite selezione naturale, crossover e mutazioni dinamiche. Include meccanismi di **Elitismo** e gestione dello **Stagnamento** (Catastrofi).
+- **🤖 Imitation Learning**: Possibilità di pre-addestrare gli agenti utilizzando dataset di partite umane per accelerare l'apprendimento di tattiche base.
+- **⚖️ Reward System Bilanciato**: Sistema di ricompense raffinato per incoraggiare il gioco difensivo, prevenire lo stacking eccessivo e scoraggiare comportamenti ripetitivi o suicidi.
+- **🗺️ Ambiente Completo**: Mappa dinamica con territori, continenti, bonus armate, obiettivi (Missioni) e gestione delle fasi di gioco (Rinforzo, Attacco, Spostamento, Manovra).
+- **🌐 Web Dashboard**: Interfaccia web integrata per monitorare l'addestramento, visualizzare le partite in tempo reale e analizzare le performance degli agenti.
 
 ## 🚀 Installazione
 
@@ -17,13 +18,11 @@ Questo progetto implementa un ambiente di **Reinforcement Learning** per addestr
     cd Risiko
     ```
 
-2. **Crea un ambiente virtuale** (opzionale ma consigliato):
+2. **Crea un ambiente virtuale**:
     ```bash
     python -m venv .venv
     # Windows
     .venv\Scripts\activate
-    # Linux/Mac
-    source .venv/bin/activate
     ```
 
 3. **Installa le dipendenze**:
@@ -33,49 +32,51 @@ Questo progetto implementa un ambiente di **Reinforcement Learning** per addestr
 
 ## 🎮 Utilizzo
 
-Per avviare il ciclo di addestramento:
-
+### Addestramento
+Per avviare l'evoluzione della popolazione:
 ```bash
 python main.py
 ```
 
-Lo script eseguirà:
+### Osservazione Match
+Per vedere i migliori agenti sfidarsi in console (modalità debug):
+```bash
+python main.py --watch
+```
 
-1. Inizializzazione di una popolazione di agenti.
-2. Avvio di un torneo in cui gli agenti giocano tra loro.
-3. Calcolo della fitness in base alle prestazioni di gioco (vittorie, conquiste, ecc.).
-4. Evoluzione della popolazione (Selezione, Crossover, Mutazione).
-5. Salvataggio del miglior agente in `best_agent.pkl`.
-6. (Opzionale) Visualizzazione di una partita del miglior agente.
+### Web Interface
+Per avviare il server web e accedere alla dashboard (stats e visualizzazione grafica):
+```bash
+python -m web.server
+```
+Poi apri `http://localhost:8000` nel browser.
 
 ## 📂 Struttura del Progetto
 
-- **`main.py`**: Punto di ingresso. Gestisce il ciclo di addestramento e l’esecuzione parallela.
-- **`core/`**: Contiene la logica del gioco.
-    - `environment.py`: Motore del gioco (regole, turni, fasi).
-    - `board.py`: Gestione dei territori e della mappa.
-    - `config.py`: Parametri di configurazione (Ricompense, Iperparametri, Regole).
-- **`ai/`**: Contiene la logica dell’AI.
-    - `agent.py`: Wrapper dell’agente AI.
-    - `network.py`: Implementazione della Rete Neurale.
-    - `evolution.py`: Logica dell’Algoritmo Genetico (Selezione, Mutazione).
-    - `processor.py`: Codifica lo stato della board per la NN e decodifica l’output della NN in azioni.
-- **`utils/`**: Funzioni di supporto per training e logging.
-- **`visual/`**: Visualizzatore in console per osservare le partite.
+- **`main.py`**: Entry point principale per il training e la gestione dei processi paralleli.
+- **`config.py`**: Configurazione centralizzata (Iperparametri, Reward, Regole di gioco).
+- **`core/`**: Logica del gioco e regole.
+    - `environment.py`: Motore del gioco e calcolo dei premi.
+    - `actions.py`: Esecuzione fisica delle azioni (Attacchi, Rinforzi).
+    - `board.py` & `territory.py`: Modello dati della mappa.
+    - `validators.py`: Controllo della validità delle mosse.
+    - `task.py`: Gestione degli obiettivi e delle missioni.
+- **`ai/`**: Cervello degli agenti.
+    - `network.py`: Architettura della Rete Neurale (NumPy focus).
+    - `evolution.py`: Operatori genetici (Mutazione, Crossover).
+    - `processor.py`: Encoding/Decoding dello stato tra board e rete.
+- **`web/`**: Server FastAPI e interfaccia frontend (Socket communication).
+- **`dataset/`**: Raccolta di dati per l'Imitation Learning.
+- **`utils/`**: Utility per il logging, training parallelo e gestione dei match.
+- **`visual/`**: Renderer ANSI per la console.
+- **`tests/`**: Suite di test unitari per l'ambiente e le ricompense.
 
-## 🔧 Configurazione
-
-Puoi modificare i parametri di training e di gioco in `core/config.py`:
-
-- **Architettura NN**: Layer nascosti, dimensione input/output.
-- **Evoluzione**: Dimensione della popolazione, tasso di mutazione, dimensione del torneo.
-- **Ricompense**: Punti per vittoria, conquista territori, ecc.
-
-## 🛠️ Tecnologie
+## 🛠️ Stack Tecnologico
 
 - **Python 3.x**
-- **NumPy**: Operazioni matriciali per la Rete Neurale.
-- **Colorama**: Output colorato in console.
+- **NumPy**: Motore di calcolo per le reti neurali.
+- **FastAPI**: Backend per la dashboard web.
+- **Colorama**: Visualizzazione raffinata in terminale.
 
 ---
 

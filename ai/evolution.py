@@ -5,7 +5,7 @@ import pickle
 import os
 from typing import List
 from ai.agent import Agent
-from core.config import Config
+from config import Config
 from utils.trainer_utils import TrainerUtils
 from core.board import Board
 

@@ -1,5 +1,5 @@
 from typing import Dict, Tuple, Any, Optional
-from core.config import Config
+from config import Config
 from core.board import Board
 from core.task import MissionManager
 from core.validators import ActionValidator
@@ -194,8 +194,10 @@ class RisikoEnvironment:
             info.update(action_extra)
             self.armies_to_place -= placed
             if self.repeat_reinforce[player_id]["count"] > 1:
-                reward += Config.REWARD['REINFORCE_REPEAT_PENALTY']
+                multiplier = self.repeat_reinforce[player_id]["count"] - 1
+                reward += Config.REWARD['REINFORCE_REPEAT_PENALTY'] * multiplier
                 info['repeat_reinforce_penalty'] = True
+                info['repeat_reinforce_count'] = self.repeat_reinforce[player_id]["count"]
 
             if self.has_reinforced and not hasattr(self, '_continent_reward_given'):
                 for _, data in Config.CONTINENTS.items():
@@ -441,6 +443,7 @@ class RisikoEnvironment:
         self.armies_to_place = 0
         self.armies_to_place_total = 0
         self._clear_pending_attack_move()
+        self.repeat_reinforce = {1: {"last": None, "count": 0}, 2: {"last": None, "count": 0}}
         if hasattr(self, '_continent_reward_given'):
             del self._continent_reward_given
         self.next_turn()

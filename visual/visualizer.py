@@ -1,6 +1,6 @@
 import os
 from colorama import init, Fore, Style
-from core.config import Config
+from config import Config
 import math
 
 init(autoreset=True)
@@ -21,19 +21,21 @@ class Visualizer:
         p_color = Visualizer.BLUE if player_id == 1 else Visualizer.RED
 
         print(
-            f"Turno: {turn:03d} | Fase: {p_color}{phase:<16}{Visualizer.RESET} "
+            f"Turno: {Visualizer.BOLD}{turn:03d}{Visualizer.RESET} | Fase: {p_color}{phase:<16}{Visualizer.RESET} "
             f"| Muove: {p_color}Player {player_id}{Visualizer.RESET}"
         )
+        print(f"Legend: {Visualizer.BLUE}P1 (Blue){Visualizer.RESET} | {Visualizer.RED}P2 (Red){Visualizer.RESET}")
+        
         mission_label, mission_details = Visualizer._format_mission(mission)
         if mission_details:
             print(f"Missione: {Visualizer.YELLOW}{mission_label} ({mission_details}){Visualizer.RESET}")
         else:
             print(f"Missione: {Visualizer.YELLOW}{mission_label}{Visualizer.RESET}")
         print(
-            f"{Visualizer.BLUE}P1 Score: {p1_score:<10.2f}{Visualizer.RESET} | "
-            f"{Visualizer.RED}P2 Score: {p2_score:<10.2f}{Visualizer.RESET}"
+            f"{Visualizer.BLUE}P1 Total Rew: {p1_score:<10.2f}{Visualizer.RESET} | "
+            f"{Visualizer.RED}P2 Total Rew: {p2_score:<10.2f}{Visualizer.RESET}"
         )
-        print('=' * 60 + '\n')
+        print('=' * 70 + '\n')
 
         n = board.n
         cols = int(math.sqrt(n))
@@ -62,7 +64,7 @@ class Visualizer:
 
             print(row_str)
 
-        print('\n' + '=' * 60)
+        print('\n' + '=' * 70)
         print(
             f"{Visualizer.BOLD}LOG ULTIME AZIONI (Player | Azione | Da->A | Q.ta | Rew):{Visualizer.RESET}"
         )
@@ -72,6 +74,11 @@ class Visualizer:
                 print(f'{Fore.YELLOW}{entry}{Visualizer.RESET}')
             elif 'VITTORIA' in entry or 'Conquista' in entry or 'Continente preso' in entry:
                 print(f'{Fore.GREEN}{Style.BRIGHT}{entry}{Visualizer.RESET}')
+            elif 'Malus' in entry or 'rischio' in entry:
+                if entry.startswith('P1'):
+                    print(f'{Fore.LIGHTBLUE_EX}{entry}{Visualizer.RESET}')
+                else:
+                    print(f'{Fore.LIGHTMAGENTA_EX}{entry}{Visualizer.RESET}')
             elif entry.startswith('P1'):
                 print(f'{Fore.CYAN}{entry}{Visualizer.RESET}')
             elif entry.startswith('P2'):

@@ -1,6 +1,6 @@
 from typing import Dict, Any, Tuple
 from core.environment import RisikoEnvironment
-from core.config import Config
+from config import Config
 
 
 PHASE_KEYS = (

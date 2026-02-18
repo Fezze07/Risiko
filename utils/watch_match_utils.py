@@ -4,7 +4,7 @@ from typing import Dict, Any
 class WatchMatchUtils:
     @staticmethod
     def get_reward_reason(action_type: str, reward: int, info: Dict[str, Any]) -> str:
-        from core.config import Config
+        from config import Config
 
         if 'error' in info:
             return f"ERROR: {info['error']}"
@@ -22,13 +22,17 @@ class WatchMatchUtils:
                 reasons.append('Rinforzo sicuro')
                 if info.get('safe_action_bonus'):
                     reasons.append('Bonus azione sicura')
+                if info.get('reinforce_safe_penalty'):
+                    reasons.append('Malus rinforzo non strategico')
                 if info.get('attack_risk_penalty'):
                     reasons.append('Malus rischio attacco (interno)')
             
             if info.get('stack_penalty'):
-                reasons.append('Malus stacking')
+                excess = info.get('stack_excess', '')
+                reasons.append(f'Malus stacking (eccesso: {excess})' if excess else 'Malus stacking')
             if info.get('repeat_reinforce_penalty'):
-                reasons.append('Malus ripetizione')
+                count = info.get('repeat_reinforce_count', '')
+                reasons.append(f'Malus ripetizione (n.{count})' if count else 'Malus ripetizione')
             
             return ' | '.join(reasons) if reasons else 'Rinforzo'
 
@@ -86,10 +90,16 @@ class WatchMatchUtils:
             parts = []
             if info.get('maneuver_strategic'):
                 parts.append('Mossa strategica (fronte)')
+            elif info.get('maneuver_strategic_stacked'):
+                parts.append('Eccesso truppe al fronte (malus)')
             elif info.get('maneuver_safe_to_safe'):
                 parts.append('Spostamento interno')
             elif info.get('maneuver_away_from_front'):
                 parts.append('Ritirata (malus)')
+            
+            if info.get('stack_penalty'):
+                excess = info.get('stack_excess', '')
+                parts.append(f'Malus stacking (eccesso: {excess})' if excess else 'Malus stacking')
             
             if info.get('left_one_army_src'):
                 parts.append('1 armata sorgente')

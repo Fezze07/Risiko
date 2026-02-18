@@ -1,6 +1,6 @@
 import random
 from typing import Dict, List, Optional
-from core.config import Config
+from config import Config
 from core.territory import Territory
 
 class Board:
