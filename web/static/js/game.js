@@ -17,6 +17,7 @@ import {
     updateSendButton,
     updateSpeedLabel,
     updateUIState,
+    updateScoreBar,
 } from "./ui.js";
 import { renderBoard, updateBoardVisuals, flashTerritory } from "./board.js";
 
@@ -25,12 +26,37 @@ export function getTerritoryById(id) {
     return gameState.boardData.territories.find((t) => t.id === id) || null;
 }
 
+function getPlayerMeta(playerId) {
+    if (!gameState.playerMap) return null;
+    return gameState.playerMap[playerId] || gameState.playerMap[String(playerId)] || null;
+}
+
+function isHumanPlayer(playerId) {
+    const meta = getPlayerMeta(playerId);
+    return !!meta && String(meta.type || "").toUpperCase() === "HUMAN";
+}
+
+function isAiPlayer(playerId) {
+    const meta = getPlayerMeta(playerId);
+    return !!meta && String(meta.type || "").toUpperCase() === "AI";
+}
+
+function canHumanAct() {
+    return (
+        gameState.mode === "PLAY" &&
+        isHumanPlayer(gameState.currentPlayer) &&
+        !gameState.isAiPlaying &&
+        !gameState.isGameOver &&
+        !gameState.isBattleModalOpen
+    );
+}
+
 export function triggerPhaseAlert() {
     if (gameState.mode !== "PLAY") {
         hidePhaseAlert();
         return;
     }
-    if (gameState.currentPlayer !== 1 || gameState.isAiPlaying || gameState.isGameOver) {
+    if (!canHumanAct()) {
         hidePhaseAlert();
         return;
     }
@@ -74,25 +100,39 @@ function handleInit(msg) {
     gameState.mode = msg.mode || gameState.mode;
     gameState.isRunning = !!msg.running;
     gameState.delayMs = msg.delay_ms || gameState.delayMs;
+    gameState.numPlayers = msg.num_players || gameState.numPlayers;
+    gameState.playerMap = msg.player_map || gameState.playerMap || {};
     gameState.boardData = msg.board;
     gameState.continents = msg.continents || [];
+    if (msg.max_armies) gameState.maxArmies = msg.max_armies;
     gameState.currentPlayer = msg.current_player;
     gameState.currentPhase = msg.phase;
     gameState.isGameOver = false;
+
+    const humanIds = Object.keys(gameState.playerMap || {})
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && isHumanPlayer(id))
+        .sort((a, b) => a - b);
+    gameState.localHumanId = humanIds.length ? humanIds[0] : 1;
 
     setModeUI(gameState.mode);
     updateSpeedLabel(gameState.delayMs);
     if (DOM.speedSlider) DOM.speedSlider.value = gameState.delayMs;
 
     updateUIState(msg);
+    if (msg.player_stats) updateScoreBar(msg.player_stats);
     renderBoard();
     const initMessage = gameState.mode === "WATCH" ? "Modalita WATCH avviata" : "Modalita PLAY avviata";
     addLog(`[INFO] ${initMessage}`, "log-info");
 
     if (gameState.mode === "PLAY") {
-        if (msg.p1_mission) {
-            DOM.missionInfo.textContent = msg.p1_mission;
-            DOM.missionInfo.title = msg.p1_mission;
+        const mission =
+            (msg.player_missions && msg.player_missions[String(gameState.localHumanId)]) ||
+            msg.p1_mission ||
+            "Missione non disponibile";
+        if (mission) {
+            DOM.missionInfo.textContent = mission;
+            DOM.missionInfo.title = mission;
         }
         triggerPhaseAlert();
     } else {
@@ -106,6 +146,9 @@ function handleStateUpdate(msg) {
         if (!gameState.boardData) gameState.boardData = msg.board;
         else gameState.boardData.territories = msg.board.territories;
     }
+    if (msg.player_map) gameState.playerMap = msg.player_map;
+    if (msg.num_players) gameState.numPlayers = msg.num_players;
+    if (msg.max_armies) gameState.maxArmies = msg.max_armies;
     gameState.currentPlayer = msg.current_player;
     gameState.currentPhase = msg.phase;
     if (msg.mode) gameState.mode = msg.mode;
@@ -121,7 +164,7 @@ function handleStateUpdate(msg) {
     updateUIState(msg);
     updateBoardVisuals();
 
-    if (gameState.mode === "PLAY" && msg.current_player === 2 && msg.running) {
+    if (gameState.mode === "PLAY" && isAiPlayer(msg.current_player) && msg.running) {
         showAiOverlay(true);
     } else {
         showAiOverlay(false);
@@ -171,6 +214,9 @@ function handlePostAttackRequired(msg) {
 export function handleMessage(msg) {
     switch (msg.type) {
         case "ready":
+            if (msg.num_players) gameState.numPlayers = msg.num_players;
+            if (msg.player_map) gameState.playerMap = msg.player_map;
+            if (msg.max_armies) gameState.maxArmies = msg.max_armies;
             addLog("[INFO] Server pronto. Scegli una modalita.", "log-info");
             break;
         case "init":
@@ -219,9 +265,12 @@ export function handleMessage(msg) {
     }
 }
 
-export function startMode(mode) {
+export function startMode(mode, options = {}) {
     if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
-    gameState.ws.send(JSON.stringify({ command: "START_MODE", mode }));
+    const payload = { command: "START_MODE", mode };
+    if (options.numPlayers) payload.num_players = Number(options.numPlayers);
+    if (options.playerTypes) payload.player_types = options.playerTypes;
+    gameState.ws.send(JSON.stringify(payload));
 }
 
 export function sendControl(action) {
@@ -238,13 +287,14 @@ export function setSpeed(delayMs) {
 export function onTerritoryClick(id) {
     if (gameState.mode !== "PLAY") return;
     if (gameState.isBattleModalOpen) return;
-    if (gameState.isAiPlaying || gameState.isGameOver || gameState.currentPlayer !== 1) return;
+    if (!canHumanAct()) return;
 
     const t = getTerritoryById(id);
     if (!t) return;
+    const actingPlayer = gameState.currentPlayer;
 
     if (gameState.currentPhase === "REINFORCE" || gameState.currentPhase === "INITIAL_PLACEMENT") {
-        if (t.owner !== 1) {
+        if (t.owner !== actingPlayer) {
             addLog("[ERRORE] Seleziona un tuo territorio per il rinforzo", "log-error");
             return;
         }
@@ -256,7 +306,7 @@ export function onTerritoryClick(id) {
         return;
     } else {
         if (gameState.selectedSrc === null) {
-            if (t.owner !== 1) {
+            if (t.owner !== actingPlayer) {
                 addLog("[ERRORE] Seleziona un tuo territorio come sorgente", "log-error");
                 return;
             }
@@ -265,18 +315,18 @@ export function onTerritoryClick(id) {
             DOM.selSrc.textContent = `#${id} (${t.armies} armies)`;
             DOM.selDest.textContent = "-";
         } else if (gameState.selectedDest === null) {
-            if (gameState.currentPhase === "ATTACK" && t.owner === 1) {
+            if (gameState.currentPhase === "ATTACK" && t.owner === actingPlayer) {
                 addLog("[ERRORE] Non puoi attaccare un tuo territorio", "log-error");
                 return;
             }
-            if (gameState.currentPhase === "MANEUVER" && t.owner !== 1) {
+            if (gameState.currentPhase === "MANEUVER" && t.owner !== actingPlayer) {
                 addLog("[ERRORE] La destinazione della manovra deve essere tua", "log-error");
                 return;
             }
             gameState.selectedDest = id;
             DOM.selDest.textContent = `#${id} (${t.armies} armies)`;
         } else {
-            if (t.owner !== 1) return;
+            if (t.owner !== actingPlayer) return;
             gameState.selectedSrc = id;
             gameState.selectedDest = null;
             DOM.selSrc.textContent = `#${id} (${t.armies} armies)`;
@@ -296,6 +346,7 @@ export function sendAction() {
     if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
     if (gameState.mode !== "PLAY") return;
     if (gameState.isBattleModalOpen) return;
+    if (!canHumanAct()) return;
 
     let qty = 1.0;
     let msg = {};
@@ -325,7 +376,8 @@ export function sendPass() {
     if (!gameState.ws || gameState.ws.readyState !== WebSocket.OPEN) return;
     if (gameState.mode !== "PLAY") return;
     if (gameState.isBattleModalOpen) return;
-    if (gameState.isAiPlaying || gameState.isGameOver || gameState.currentPlayer !== 1) return;
+    if (!canHumanAct()) return;
+    if (!(gameState.currentPlayer === 1 && isHumanPlayer(1))) return;
     gameState.ws.send(JSON.stringify({ action_type: "PASS" }));
     clearSelection();
 }

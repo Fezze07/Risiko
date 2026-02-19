@@ -24,6 +24,11 @@ class ActionValidator:
         if qty <= 0 or qty < Config.GAME.get("MIN_REINFORCE_QTY", 0.0):
             return False, "Quantita' rinforzo troppo bassa"
 
+        # Check Max Armies (Global Limit)
+        current_total = sum(t.armies for t in board.territories.values() if t.owner_id == player_id)
+        if current_total >= Config.GAME.get('MAX_TOTAL_ARMIES', 100):
+            return False, "Limite armate superato (Global Max)!"
+
         # Check simulato sulla quantità
         to_add = max(1, int(armies_to_place * qty))
         space_in_territory = max_armies - t_dest.armies

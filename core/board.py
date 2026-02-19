@@ -4,8 +4,11 @@ from config import Config
 from core.territory import Territory
 
 class Board:
-    def __init__(self) -> None:
+    def __init__(self, num_players: Optional[int] = None) -> None:
         self.n: int = Config.GAME["NUM_TERRITORIES"]
+        configured_players = int(Config.GAME.get("NUM_PLAYERS", 2))
+        resolved_players = num_players if num_players is not None else configured_players
+        self.num_players: int = max(2, int(resolved_players))
         self.territories: Dict[int, Territory] = {}
         self._create_map()
         self.reset()
@@ -45,15 +48,16 @@ class Board:
         if id1 not in self.territories[id2].neighbors:
             self.territories[id2].neighbors.append(id1)
 
-    def reset(self) -> None:
+    def reset(self, num_players: Optional[int] = None) -> None:
         # Resetta la mappa per una nuova partita
+        if num_players is not None:
+            self.num_players = max(2, int(num_players))
         ids: List[int] = list(self.territories.keys())
         random.shuffle(ids)
 
         # Reset armate e proprietari
         for i, t_id in enumerate(ids):
-            # 50/50 split preciso
-            owner: int = 1 if i < self.n // 2 else 2
+            owner: int = (i % self.num_players) + 1
             self.territories[t_id].owner_id = owner
             self.territories[t_id].armies = Config.GAME["STARTING_ARMIES"]
 

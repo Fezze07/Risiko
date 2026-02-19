@@ -1,74 +1,83 @@
 import numpy as np
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from core.board import Board
 from config import Config
 
 
 class Processor:
+    FEATURES_PER_TERRITORY = 4
+
     def __init__(self, board: Board):
         self.num_territories: int = board.n
-        self.num_continents: int = len(Config.CONTINENTS)
-        # Feature: (Territori * 3) + Continenti + Target + Turno + 5 fasi
-        self.input_size: int = (
-            (self.num_territories * 3) + self.num_continents + self.num_continents + 6
+        self.features_per_territory: int = self.FEATURES_PER_TERRITORY
+        # Input fisso: 4 feature per territorio.
+        self.input_size: int = self.num_territories * self.features_per_territory
+
+    @staticmethod
+    def _normalize_enemy_relative(relative_enemy_id: int, total_players: int) -> float:
+        if relative_enemy_id <= 0:
+            return 0.0
+        if total_players <= 2:
+            return 1.0
+        denominator = total_players - 2
+        if denominator <= 0:
+            return 1.0
+        normalized = 0.1 + ((relative_enemy_id - 1) / denominator) * 0.9
+        return float(min(1.0, max(0.1, normalized)))
+
+    @staticmethod
+    def _resolve_total_players(board: Board, current_player_id: int) -> int:
+        configured_players = int(Config.GAME.get("NUM_PLAYERS", 2))
+        observed_max_owner = max(
+            (t.owner_id for t in board.territories.values() if t.owner_id is not None),
+            default=0,
         )
+        return max(2, configured_players, observed_max_owner, current_player_id)
 
     def encode_state(
         self,
         board: Board,
-        player_id: int,
-        current_turn: int,
-        current_phase: str,
-        mission_data: Dict[str, Any],
+        current_player_id: int,
+        current_turn: int = 0,
+        current_phase: str = "",
+        mission_data: Optional[Dict[str, Any]] = None,
     ) -> np.ndarray:
-        state_vector = np.zeros(self.input_size)
-        for i in range(self.num_territories):
-            territory = board.territories[i]
-            state_vector[i] = 1 if territory.owner_id == player_id else -1
-            state_vector[self.num_territories + i] = territory.armies / Config.GAME[
-                "MAX_ARMIES_PER_TERRITORY"
-            ]
-            danger = sum(
-                board.territories[n].armies
-                for n in territory.neighbors
-                if board.territories[n].owner_id != player_id
+        # Parametri mantenuti per compatibilita' con i call-site esistenti.
+        _ = current_turn, current_phase, mission_data
+
+        state_vector = np.zeros(self.input_size, dtype=np.float32)
+        max_armies = max(1, int(Config.GAME["MAX_ARMIES_PER_TERRITORY"]))
+        total_players = self._resolve_total_players(board, current_player_id)
+
+        for territory_id in range(self.num_territories):
+            territory = board.territories[territory_id]
+            base = territory_id * self.features_per_territory
+            owner_id = territory.owner_id
+
+            # 1) is_mine
+            state_vector[base] = 1.0 if owner_id == current_player_id else 0.0
+
+            # 2) army_count_normalized
+            state_vector[base + 1] = min(1.0, territory.armies / max_armies)
+
+            # 3) enemy_id_relative (0 se territorio mio o owner non valido)
+            enemy_relative = 0.0
+            if owner_id is not None and owner_id != current_player_id:
+                relative_id = (owner_id - current_player_id) % total_players
+                if relative_id == 0:
+                    relative_id = total_players - 1
+                enemy_relative = self._normalize_enemy_relative(relative_id, total_players)
+            state_vector[base + 2] = enemy_relative
+
+            # 4) threat_level: somma armate nemiche confinanti normalizzata.
+            enemy_neighbor_armies = sum(
+                board.territories[n_id].armies
+                for n_id in territory.neighbors
+                if board.territories[n_id].owner_id not in (None, current_player_id)
             )
-            state_vector[2 * self.num_territories + i] = min(1.0, danger / 20.0)
-
-        continent_offset = 3 * self.num_territories
-        mission_offset = continent_offset + self.num_continents
-        cont_keys = sorted(Config.CONTINENTS.keys())
-        for idx, key in enumerate(cont_keys):
-            data = Config.CONTINENTS[key]
-            owned_count = sum(
-                1
-                for territory_id in data["t_ids"]
-                if board.territories[territory_id].owner_id == player_id
-            )
-            state_vector[continent_offset + idx] = owned_count / len(data["t_ids"])
-
-        mission_bits = np.zeros(self.num_continents)
-        if mission_data and mission_data.get("type") == "continents":
-            target_zones = mission_data.get("target", [])
-            for zone in target_zones:
-                if zone in cont_keys:
-                    mission_bits[cont_keys.index(zone)] = 1.0
-        elif mission_data and mission_data.get("type") == "territory_count":
-            mission_bits[:] = 1.0
-        state_vector[mission_offset : mission_offset + self.num_continents] = mission_bits
-
-        state_vector[-6] = current_turn / Config.GAME["MAX_TURNS"]
-        if current_phase == "INITIAL_PLACEMENT":
-            state_vector[-5] = 1.0
-        elif current_phase == "REINFORCE":
-            state_vector[-4] = 1.0
-        elif current_phase == "ATTACK":
-            state_vector[-3] = 1.0
-        elif current_phase == "POST_ATTACK_MOVE":
-            state_vector[-2] = 1.0
-        elif current_phase == "MANEUVER":
-            state_vector[-1] = 1.0
+            max_threat = max_armies * max(1, len(territory.neighbors))
+            state_vector[base + 3] = min(1.0, enemy_neighbor_armies / max_threat)
 
         return state_vector
 

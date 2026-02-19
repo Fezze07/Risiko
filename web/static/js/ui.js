@@ -13,9 +13,8 @@ export const DOM = {
     btnClear: document.getElementById("btn-clear"),
     logContainer: document.getElementById("log-container"),
     phaseValue: document.getElementById("phase-value"),
-    scoreP1: document.getElementById("score-p1"),
-    scoreP2: document.getElementById("score-p2"),
     turnInfo: document.getElementById("turn-info"),
+    currentPlayerLabel: document.getElementById("current-player-label"),
     missionInfo: document.getElementById("mission-info"),
     aiOverlay: document.getElementById("ai-thinking-overlay"),
     armiesInfo: document.getElementById("armies-info"),
@@ -48,9 +47,22 @@ export const DOM = {
     btnCtrlReset: document.getElementById("btn-ctrl-reset"),
     speedSlider: document.getElementById("speed-slider"),
     speedValue: document.getElementById("speed-value"),
-    scoreP1Label: document.getElementById("score-p1-label"),
-    scoreP2Label: document.getElementById("score-p2-label"),
+    statsBar: document.getElementById("stats-bar"),
+    leaderboardCurrent: document.getElementById("leaderboard-current"),
+    playerLegend: document.getElementById("player-legend"),
+    encodingDebug: document.getElementById("encoding-debug"),
+    territoryTooltip: document.getElementById("territory-tooltip"),
 };
+
+function getPlayerMeta(playerId) {
+    if (!gameState.playerMap) return null;
+    return gameState.playerMap[playerId] || gameState.playerMap[String(playerId)] || null;
+}
+
+function isHumanPlayer(playerId) {
+    const meta = getPlayerMeta(playerId);
+    return !!meta && String(meta.type || "").toUpperCase() === "HUMAN";
+}
 
 export function setModeUI(mode) {
     if (!mode) {
@@ -62,13 +74,8 @@ export function setModeUI(mode) {
     if (DOM.controlBar) {
         DOM.controlBar.classList.remove("hidden");
     }
-    if (mode === "WATCH") {
-        if (DOM.scoreP1Label) DOM.scoreP1Label.textContent = "AI 1";
-        if (DOM.scoreP2Label) DOM.scoreP2Label.textContent = "AI 2";
-        if (DOM.missionInfo) DOM.missionInfo.textContent = "Spectator mode: AI vs AI";
-    } else {
-        if (DOM.scoreP1Label) DOM.scoreP1Label.textContent = "PLAYER 1";
-        if (DOM.scoreP2Label) DOM.scoreP2Label.textContent = "AI AGENT";
+    if (mode === "WATCH" && DOM.missionInfo) {
+        DOM.missionInfo.textContent = "Spectator mode: AI vs AI";
     }
     syncControlState();
 }
@@ -82,6 +89,136 @@ export function syncControlState() {
 export function updateSpeedLabel(ms) {
     if (DOM.speedValue) {
         DOM.speedValue.textContent = `${ms} ms`;
+    }
+}
+
+export function updateLeaderboard(playerStats = [], currentPlayer = 1) {
+    if (DOM.currentPlayerLabel) {
+        DOM.currentPlayerLabel.textContent = `P${currentPlayer}`;
+    }
+    if (DOM.leaderboardCurrent) {
+        const meta = getPlayerMeta(currentPlayer);
+        const role = meta ? String(meta.type || "AI").toUpperCase() : "AI";
+        DOM.leaderboardCurrent.textContent = `Current: P${currentPlayer} (${role})`;
+    }
+    if (!DOM.playerLegend) return;
+    DOM.playerLegend.innerHTML = "";
+
+    const sorted = [...playerStats].sort((a, b) => {
+        if (b.territories !== a.territories) return b.territories - a.territories;
+        return b.armies - a.armies;
+    });
+
+    sorted.forEach((entry, idx) => {
+        const row = document.createElement("div");
+        row.className = "legend-row";
+        if (entry.id === currentPlayer) {
+            row.classList.add("current-turn");
+        }
+
+        const rank = document.createElement("div");
+        rank.className = "legend-rank";
+        rank.textContent = String(idx + 1);
+
+        const swatch = document.createElement("span");
+        swatch.className = "legend-swatch";
+        swatch.style.background = entry.color || "#666";
+
+        const main = document.createElement("div");
+        main.className = "legend-main";
+
+        const name = document.createElement("span");
+        name.className = "legend-name";
+        name.textContent = `P${entry.id}`;
+
+        const badges = document.createElement("div");
+        badges.className = "legend-badges";
+        const role = document.createElement("span");
+        role.className = "legend-role";
+        role.textContent = String(entry.type || "AI").toUpperCase();
+        badges.appendChild(role);
+
+        main.appendChild(swatch);
+        main.appendChild(name);
+        main.appendChild(badges);
+
+        const stats = document.createElement("div");
+        stats.className = "legend-stats";
+        const tChip = document.createElement("span");
+        tChip.className = "legend-chip";
+        tChip.textContent = `${entry.territories} T`;
+        const aChip = document.createElement("span");
+        aChip.className = "legend-chip";
+        aChip.textContent = `${entry.armies} A`;
+        const score = document.createElement("span");
+        score.className = "legend-score";
+        score.textContent = String(entry.score ?? 0);
+        stats.appendChild(tChip);
+        stats.appendChild(aChip);
+        stats.appendChild(score);
+
+        row.appendChild(rank);
+        row.appendChild(main);
+        row.appendChild(stats);
+        DOM.playerLegend.appendChild(row);
+    });
+}
+
+export function updateScoreBar(playerStats = []) {
+    if (!DOM.statsBar) return;
+    DOM.statsBar.innerHTML = "";
+    if (!Array.isArray(playerStats) || playerStats.length === 0) return;
+
+    playerStats.forEach((entry) => {
+        const card = document.createElement("div");
+        card.className = "score-card player-score";
+        if (entry.color) {
+            card.style.borderLeftColor = entry.color;
+        }
+
+        const label = document.createElement("span");
+        label.textContent = `P${entry.id}`;
+        if (entry.type) {
+            const role = document.createElement("span");
+            role.className = "legend-role";
+            role.textContent = String(entry.type || "AI").toUpperCase();
+            label.appendChild(role);
+        }
+
+        const value = document.createElement("span");
+        value.className = "score-value";
+        value.textContent = String(entry.score ?? 0);
+
+        card.appendChild(label);
+        card.appendChild(value);
+        DOM.statsBar.appendChild(card);
+    });
+}
+export function showEncodingDebug(territoryId, data, pointer = null) {
+    const text =
+        `Territory #${territoryId}\n` +
+        `Is Mine: ${data.isMine.toFixed(1)}\n` +
+        `Normalized Armies: ${data.armiesNormalized.toFixed(3)}\n` +
+        `Relative Enemy ID: ${data.enemyRelative.toFixed(3)}\n` +
+        `Threat Level: ${data.threatLevel.toFixed(3)}`;
+
+    if (DOM.encodingDebug) {
+        DOM.encodingDebug.textContent = text;
+    }
+    if (DOM.territoryTooltip && pointer) {
+        DOM.territoryTooltip.textContent = text;
+        DOM.territoryTooltip.style.left = `${pointer.x + 14}px`;
+        DOM.territoryTooltip.style.top = `${pointer.y + 14}px`;
+        DOM.territoryTooltip.classList.remove("hidden");
+    }
+}
+
+export function clearEncodingDebug() {
+    if (DOM.encodingDebug) {
+        DOM.encodingDebug.textContent = "Hover su un territorio per vedere le feature NN.";
+    }
+    if (DOM.territoryTooltip) {
+        DOM.territoryTooltip.classList.add("hidden");
     }
 }
 
@@ -110,10 +247,10 @@ export function showBattleOverlay(rollsAtt, rollsDef, meta) {
         DOM.diceDef.appendChild(die);
     });
     if (meta && DOM.battleAttackerLabel && DOM.battleDefenderLabel && DOM.battleRoute) {
-        const att = meta.player === 1 ? "P1" : "P2";
-        const def = meta.player === 1 ? "P2" : "P1";
-        DOM.battleAttackerLabel.textContent = `Attacker ${att}`;
-        DOM.battleDefenderLabel.textContent = `Defender ${def}`;
+        const attackerId = meta.player !== undefined ? meta.player : "?";
+        const defenderId = meta.defender_id !== undefined ? meta.defender_id : "?";
+        DOM.battleAttackerLabel.textContent = `Attacker P${attackerId}`;
+        DOM.battleDefenderLabel.textContent = `Defender P${defenderId}`;
         const src = meta.src !== undefined ? `#${meta.src}` : "?";
         const dest = meta.dest !== undefined ? `#${meta.dest}` : "?";
         DOM.battleRoute.textContent = `${src} -> ${dest}`;
@@ -151,17 +288,27 @@ export function addLog(text, className) {
     while (DOM.logContainer.children.length > 200) {
         DOM.logContainer.removeChild(DOM.logContainer.firstChild);
     }
+    return el;
 }
 
 export function handleLog(msg) {
     const entry = msg.entry || "";
-    const player = msg.player || (entry.startsWith("P1") ? 1 : entry.startsWith("P2") ? 2 : 0);
-    let cls = player === 1 ? "log-p1" : player === 2 ? "log-p2" : "";
+    const player = Number(msg.player || 0);
+    let cls = "";
     if (msg.reward !== undefined) {
         if (msg.reward > 0) cls += " log-reward-pos";
         else if (msg.reward < 0) cls += " log-reward-neg";
     }
-    addLog(entry, cls);
+    const line = addLog(entry, cls.trim());
+    const meta = getPlayerMeta(player);
+    if (line && meta && meta.color) {
+        line.style.borderLeftColor = meta.color;
+        const rawColor = String(meta.color);
+        const alphaBg = rawColor.startsWith("hsl(")
+            ? rawColor.replace("hsl(", "hsla(").replace(")", ", 0.16)")
+            : rawColor;
+        line.style.background = alphaBg;
+    }
 }
 
 export function showAiOverlay(show) {
@@ -175,12 +322,15 @@ export function showAiOverlay(show) {
 
 export function updateUIState(msg) {
     DOM.phaseValue.textContent = msg.phase || gameState.currentPhase;
-    DOM.turnInfo.textContent = `Turno: ${msg.turn || 0}`;
-    if (msg.p1_score !== undefined) DOM.scoreP1.textContent = msg.p1_score;
-    if (msg.p2_score !== undefined) DOM.scoreP2.textContent = msg.p2_score;
+    DOM.turnInfo.textContent = `${msg.turn || 0}`;
+    if (DOM.currentPlayerLabel) DOM.currentPlayerLabel.textContent = `P${gameState.currentPlayer}`;
+    if (msg.player_stats) {
+        updateLeaderboard(msg.player_stats, gameState.currentPlayer);
+        updateScoreBar(msg.player_stats);
+    }
 
     const atp = msg.armies_to_place || 0;
-    const canShowReinforce = gameState.mode === "PLAY" && gameState.currentPlayer === 1;
+    const canShowReinforce = gameState.mode === "PLAY" && isHumanPlayer(gameState.currentPlayer);
     if (atp > 0 && canShowReinforce && (gameState.currentPhase === "REINFORCE" || gameState.currentPhase === "INITIAL_PLACEMENT")) {
         DOM.armiesInfo.classList.remove("hidden");
         DOM.armiesCount.textContent = atp;
@@ -188,13 +338,18 @@ export function updateUIState(msg) {
         DOM.armiesInfo.classList.add("hidden");
     }
 
-    const myTurn = gameState.mode === "PLAY" && gameState.currentPlayer === 1 && !gameState.isAiPlaying && !gameState.isGameOver && !gameState.isBattleModalOpen;
-    const allowTactical = gameState.mode === "PLAY";
-    DOM.btnPass.disabled = !myTurn;
-    DOM.btnSend.disabled = !allowTactical;
-    DOM.btnClear.disabled = !allowTactical;
-    if (DOM.btnQtyMinus) DOM.btnQtyMinus.disabled = !allowTactical;
-    if (DOM.btnQtyPlus) DOM.btnQtyPlus.disabled = !allowTactical;
+    const humanTurn =
+        gameState.mode === "PLAY" &&
+        isHumanPlayer(gameState.currentPlayer) &&
+        !gameState.isAiPlaying &&
+        !gameState.isGameOver &&
+        !gameState.isBattleModalOpen;
+    const passAllowed = humanTurn && gameState.currentPlayer === 1 && isHumanPlayer(1);
+    DOM.btnPass.disabled = !passAllowed;
+    DOM.btnSend.disabled = !humanTurn;
+    DOM.btnClear.disabled = !humanTurn;
+    if (DOM.btnQtyMinus) DOM.btnQtyMinus.disabled = !humanTurn;
+    if (DOM.btnQtyPlus) DOM.btnQtyPlus.disabled = !humanTurn;
     updateSendButton();
     updateQuantityUI();
     syncControlState();
@@ -202,7 +357,7 @@ export function updateUIState(msg) {
 
 export function handleReinforceInfo(msg) {
     const n = msg.armies_to_place || 0;
-    if (gameState.mode !== "PLAY") {
+    if (gameState.mode !== "PLAY" || !isHumanPlayer(gameState.currentPlayer)) {
         DOM.armiesInfo.classList.add("hidden");
         return;
     }
@@ -221,22 +376,27 @@ export function handleGameOver(msg) {
     gameState.isRunning = false;
     DOM.gameOverModal.classList.remove("hidden");
     let winnerDisplay = "GAME OVER";
-    if (gameState.mode === "WATCH") {
-        winnerDisplay = msg.winner === 1 ? "AI 1 VINCE" : msg.winner === 2 ? "AI 2 VINCE" : "PAREGGIO";
+    if (msg.winner > 0) {
+        const winnerMeta = getPlayerMeta(msg.winner);
+        const role = winnerMeta ? String(winnerMeta.type || "AI").toUpperCase() : "AI";
+        winnerDisplay = `${role} P${msg.winner} VINCE`;
     } else {
-        winnerDisplay = msg.winner === 1 ? "HAI VINTO!" : msg.winner === 2 ? "AI AGENT VINCE" : "PAREGGIO";
+        winnerDisplay = "PAREGGIO";
     }
     DOM.gameOverTitle.textContent = winnerDisplay;
     DOM.gameOverMsg.textContent = `Risultato missione: ${msg.message}`;
-    if (msg.p1_score !== undefined) DOM.p1FinalReward.textContent = Math.round(msg.p1_score);
-    if (msg.p2_score !== undefined) DOM.p2FinalReward.textContent = Math.round(msg.p2_score);
+    if (msg.player_stats) {
+        updateLeaderboard(msg.player_stats, gameState.currentPlayer);
+        updateScoreBar(msg.player_stats);
+    }
     addLog(`[GAME OVER] Vincitore: Player ${msg.winner}`, "log-info");
     syncControlState();
 }
 
 export function updateQuantityUI() {
     const stepperDiv = document.querySelector(".army-stepper");
-    if (gameState.mode !== "PLAY") {
+    const humanTurn = gameState.mode === "PLAY" && isHumanPlayer(gameState.currentPlayer);
+    if (!humanTurn) {
         if (stepperDiv) stepperDiv.style.display = "none";
         return;
     }
@@ -271,8 +431,13 @@ export function updateQuantityUI() {
 }
 
 export function updateSendButton() {
-    const myTurn = gameState.mode === "PLAY" && gameState.currentPlayer === 1 && !gameState.isAiPlaying && !gameState.isGameOver;
-    if (!myTurn) {
+    const humanTurn =
+        gameState.mode === "PLAY" &&
+        isHumanPlayer(gameState.currentPlayer) &&
+        !gameState.isAiPlaying &&
+        !gameState.isGameOver &&
+        !gameState.isBattleModalOpen;
+    if (!humanTurn) {
         DOM.btnSend.disabled = true;
         return;
     }

@@ -2,7 +2,7 @@ import asyncio
 import json
 import math
 import traceback
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -18,15 +18,22 @@ from web.utils import (
     serialize_continents,
     territory_coords,
 )
+from .constants import (
+    DEFAULT_PLAY_AI_DELAY_MS,
+    DEFAULT_WATCH_DELAY_MS,
+    MAX_DELAY_MS,
+    MAX_PLAYERS,
+    MIN_DELAY_MS,
+    MIN_PLAYERS,
+)
+from .helpers import fallback_player_colors, normalize_role
 
 
-MIN_DELAY_MS = 100
-MAX_DELAY_MS = 2000
-DEFAULT_WATCH_DELAY_MS = 2000
-DEFAULT_PLAY_AI_DELAY_MS = 2000
-
-
-async def ws_game_handler(ws: WebSocket) -> None:
+async def ws_game_handler(
+    ws: WebSocket,
+    initial_num_players: int = 2,
+    color_provider: Optional[Callable[[int], Dict[int, str]]] = None,
+) -> None:
     await ws.accept()
 
     env: Optional[RisikoEnvironment] = None
@@ -38,10 +45,13 @@ async def ws_game_handler(ws: WebSocket) -> None:
     running: bool = False
     game_over: bool = False
     delay_ms: int = DEFAULT_WATCH_DELAY_MS
-    p1_total_reward: int = 0
-    p2_total_reward: int = 0
     action_log: List[str] = []
     runner_task: Optional[asyncio.Task] = None
+
+    num_players: int = max(MIN_PLAYERS, min(MAX_PLAYERS, int(initial_num_players)))
+    player_map: Dict[int, Dict[str, Any]] = {}
+    human_players: Set[int] = set()
+    player_scores: Dict[int, int] = {}
 
     async def send_json(data: Dict[str, Any]) -> None:
         try:
@@ -56,11 +66,87 @@ async def ws_game_handler(ws: WebSocket) -> None:
             parsed = DEFAULT_WATCH_DELAY_MS
         return max(MIN_DELAY_MS, min(MAX_DELAY_MS, parsed))
 
+    def clamp_players(value: Any) -> int:
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            parsed = MIN_PLAYERS
+        return max(MIN_PLAYERS, min(MAX_PLAYERS, parsed))
+
     def get_delay_seconds() -> float:
         return max(0.0, delay_ms / 1000.0)
 
+    def get_colors(total: int) -> Dict[int, str]:
+        if color_provider is None:
+            return fallback_player_colors(total)
+        try:
+            provided = color_provider(total)
+        except Exception:
+            return fallback_player_colors(total)
+        if not isinstance(provided, dict):
+            return fallback_player_colors(total)
+        fallback = fallback_player_colors(total)
+        for p_id in range(1, total + 1):
+            if p_id not in provided:
+                provided[p_id] = fallback[p_id]
+        return provided
+
+    def build_player_map(
+        selected_mode: str, total_players: int, payload: Optional[Dict[str, Any]] = None
+    ) -> Dict[int, Dict[str, Any]]:
+        payload = payload or {}
+        roles: Dict[int, str] = {
+            p_id: ("HUMAN" if selected_mode == "PLAY" and p_id == 1 else "AI")
+            for p_id in range(1, total_players + 1)
+        }
+        raw_types = payload.get("player_types")
+        if raw_types is None:
+            raw_types = payload.get("players")
+
+        if isinstance(raw_types, dict):
+            for key, value in raw_types.items():
+                try:
+                    p_id = int(key)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= p_id <= total_players:
+                    roles[p_id] = normalize_role(value)
+        elif isinstance(raw_types, list):
+            for idx, value in enumerate(raw_types, start=1):
+                if idx > total_players:
+                    break
+                roles[idx] = normalize_role(value)
+
+        if selected_mode == "WATCH":
+            for p_id in roles:
+                roles[p_id] = "AI"
+        elif selected_mode == "PLAY" and not any(role == "HUMAN" for role in roles.values()):
+            roles[1] = "HUMAN"
+
+        colors = get_colors(total_players)
+        result: Dict[int, Dict[str, Any]] = {}
+        for p_id in range(1, total_players + 1):
+            result[p_id] = {
+                "id": p_id,
+                "type": roles[p_id],
+                "color": colors[p_id],
+            }
+        return result
+
+    def get_mission_for_player(player_id: int) -> Dict[str, Any]:
+        if not env:
+            return {}
+        mission = env.get_player_mission(player_id)
+        if mission:
+            return mission
+        if player_id == 1:
+            return env.p1_mission
+        if player_id == 2:
+            return env.p2_mission
+        return {}
+
     def parse_human_action(msg: Dict[str, Any]) -> Dict[str, Any]:
-        action_type = msg.get("action_type", "PASS")
+        action_type = str(msg.get("action_type", "PASS")).upper()
         action: Dict[str, Any] = {"type": action_type}
         if action_type == "REINFORCE":
             action["src"] = msg.get("dest", 0)
@@ -93,6 +179,36 @@ async def ws_game_handler(ws: WebSocket) -> None:
                 env.armies_to_place_total = bonus
                 env.has_reinforced = True
 
+    def is_human_turn() -> bool:
+        if not env:
+            return False
+        return player_map.get(env.player_turn, {}).get("type") == "HUMAN"
+
+    def is_ai_turn() -> bool:
+        if not env:
+            return False
+        return player_map.get(env.player_turn, {}).get("type") == "AI"
+
+    def build_player_stats() -> List[Dict[str, Any]]:
+        if not env:
+            return []
+        stats: List[Dict[str, Any]] = []
+        for p_id in range(1, num_players + 1):
+            territories = [
+                t for t in env.board.territories.values() if t.owner_id == p_id
+            ]
+            stats.append(
+                {
+                    "id": p_id,
+                    "type": player_map.get(p_id, {}).get("type", "AI"),
+                    "color": player_map.get(p_id, {}).get("color", "#888888"),
+                    "territories": len(territories),
+                    "armies": sum(t.armies for t in territories),
+                    "score": int(player_scores.get(p_id, 0)),
+                }
+            )
+        return stats
+
     async def send_state_update(extra_info: Optional[Dict[str, Any]] = None) -> None:
         if not env:
             return
@@ -101,14 +217,18 @@ async def ws_game_handler(ws: WebSocket) -> None:
             "mode": mode,
             "running": running,
             "delay_ms": delay_ms,
+            "num_players": num_players,
+            "player_map": player_map,
+            "player_stats": build_player_stats(),
             "board": {"territories": serialize_board(env, coords)},
             "current_player": env.player_turn,
             "phase": env.current_phase,
             "turn": env.current_turn,
-            "p1_score": p1_total_reward,
-            "p2_score": p2_total_reward,
+            "p1_score": int(player_scores.get(1, 0)),
+            "p2_score": int(player_scores.get(2, 0)),
             "armies_to_place": env.armies_to_place,
             "action_log": action_log[-30:],
+            "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
         }
         if extra_info:
             payload["extra"] = extra_info
@@ -119,25 +239,25 @@ async def ws_game_handler(ws: WebSocket) -> None:
         if not env:
             return
         winner, _ = env.is_game_over()
-        if winner == 1:
-            reason_msg = f"Vittoria per Missione: {format_mission(env.p1_mission)}"
-        elif winner == 2:
-            reason_msg = f"Vittoria per Missione: {format_mission(env.p2_mission)}"
+        if winner > 0:
+            reason_msg = f"Vittoria per Missione: {format_mission(get_mission_for_player(winner))}"
         else:
             reason_msg = "Pareggio (Limite Turni)"
+
         await send_json(
             {
                 "type": "game_over",
                 "winner": winner,
-                "p1_score": p1_total_reward,
-                "p2_score": p2_total_reward,
                 "message": reason_msg,
+                "scores": {str(k): int(v) for k, v in player_scores.items()},
+                "player_stats": build_player_stats(),
+                "p1_score": int(player_scores.get(1, 0)),
+                "p2_score": int(player_scores.get(2, 0)),
             }
         )
         game_over = True
 
     async def apply_action(action: Dict[str, Any], player_id: int, mission: Dict[str, Any]) -> None:
-        nonlocal p1_total_reward, p2_total_reward
         nonlocal game_over
 
         if not env or not processor or game_over:
@@ -146,12 +266,16 @@ async def ws_game_handler(ws: WebSocket) -> None:
         pending_sample = None
         if (
             mode == "PLAY"
-            and player_id == 1
+            and player_map.get(player_id, {}).get("type") == "HUMAN"
             and Config.HUMAN_DATA.get("ENABLED", False)
             and env.current_phase != "INITIAL_PLACEMENT"
         ):
             state = processor.encode_state(
-                env.board, player_id, env.current_turn, env.current_phase, mission
+                env.board,
+                current_player_id=player_id,
+                current_turn=env.current_turn,
+                current_phase=env.current_phase,
+                mission_data=mission,
             )
             target = encode_action_target(env.board, player_id, env.current_phase, action)
             if target is not None:
@@ -168,6 +292,7 @@ async def ws_game_handler(ws: WebSocket) -> None:
             "player": player_id,
             "src": action.get("src"),
             "dest": action.get("dest"),
+            "defender_id": info.get("defender_id"),
             "qty": info.get("reinforce_qty")
             or info.get("maneuver_qty")
             or info.get("post_attack_move_qty"),
@@ -175,17 +300,23 @@ async def ws_game_handler(ws: WebSocket) -> None:
 
         if pending_sample and "error" not in info:
             winner_check, _ = env.is_game_over()
-            if reward > 0 or winner_check == 1:
+            if reward > 0 or winner_check == player_id:
                 append_sample(pending_sample, Config.HUMAN_DATA["DATASET_PATH"])
 
-        if player_id == 1:
-            p1_total_reward += reward
-            if "opponent_reward" in info:
-                p2_total_reward += int(info["opponent_reward"])
-        else:
-            p2_total_reward += reward
-            if "opponent_reward" in info:
-                p1_total_reward += int(info["opponent_reward"])
+        player_scores[player_id] = int(player_scores.get(player_id, 0) + reward)
+
+        opp_reward = int(info.get("opponent_reward", 0)) if info.get("opponent_reward") else 0
+        if opp_reward:
+            defender_id = info.get("defender_id")
+            if (
+                isinstance(defender_id, int)
+                and defender_id in player_scores
+                and defender_id != player_id
+            ):
+                player_scores[defender_id] = int(player_scores[defender_id] + opp_reward)
+            elif num_players == 2:
+                other = 1 if player_id == 2 else 2
+                player_scores[other] = int(player_scores.get(other, 0) + opp_reward)
 
         reason = WatchMatchUtils.get_reward_reason(action["type"], reward, info)
         log_entry = WatchMatchUtils.format_log_line(player_id, action, reward, reason)
@@ -203,7 +334,7 @@ async def ws_game_handler(ws: WebSocket) -> None:
             await send_game_over()
             return
 
-        if mode == "PLAY" and player_id == 1 and (
+        if mode == "PLAY" and player_map.get(player_id, {}).get("type") == "HUMAN" and (
             info.get("requires_post_attack_move") or info.get("post_attack_move_required")
         ):
             await send_json(
@@ -224,58 +355,54 @@ async def ws_game_handler(ws: WebSocket) -> None:
                 pass
         runner_task = None
 
-    async def run_play_ai() -> None:
-        nonlocal running
+    async def run_auto_players() -> None:
         try:
-            while mode == "PLAY" and running and not game_over and env and env.player_turn == 2:
-                prepare_reinforce(2)
-                await send_json({"type": "ai_thinking"})
-                await asyncio.sleep(get_delay_seconds())
-                action = ai_agents[2].think(
-                    env.board, 2, env.current_turn, env.current_phase, env.p2_mission
-                )
-                await apply_action(action, 2, env.p2_mission)
-                if game_over or not env:
-                    break
-                if env.current_phase == "POST_ATTACK_MOVE" and env.player_turn == 2:
-                    await asyncio.sleep(get_delay_seconds())
-                    post_action = ai_agents[2].think(
-                        env.board, 2, env.current_turn, env.current_phase, env.p2_mission
-                    )
-                    post_action["type"] = "POST_ATTACK_MOVE"
-                    await apply_action(post_action, 2, env.p2_mission)
-                await send_json({"type": "ai_done"})
-
-            if mode == "PLAY" and env and env.player_turn == 1 and not game_over:
-                prepare_reinforce(1)
-                await send_json(
-                    {"type": "reinforce_info", "armies_to_place": env.armies_to_place}
-                )
-                await send_state_update()
-        finally:
-            await send_json({"type": "runner_stopped"})
-
-    async def run_watch_mode() -> None:
-        nonlocal running
-        try:
-            while mode == "WATCH" and running and not game_over and env:
+            while mode in ("PLAY", "WATCH") and running and not game_over and env and is_ai_turn():
                 curr_player = env.player_turn
+                agent = ai_agents.get(curr_player)
+                if agent is None:
+                    await send_json(
+                        {
+                            "type": "error",
+                            "message": f"Agente AI non disponibile per player {curr_player}",
+                        }
+                    )
+                    break
+                mission = get_mission_for_player(curr_player)
                 prepare_reinforce(curr_player)
-                mission = env.p1_mission if curr_player == 1 else env.p2_mission
+
+                await send_json({"type": "ai_thinking", "player": curr_player})
                 await asyncio.sleep(get_delay_seconds())
-                action = ai_agents[curr_player].think(
+                action = agent.think(
                     env.board, curr_player, env.current_turn, env.current_phase, mission
                 )
                 await apply_action(action, curr_player, mission)
                 if game_over or not env:
                     break
-                if env.current_phase == "POST_ATTACK_MOVE" and env.player_turn == curr_player:
+
+                if env.current_phase == "POST_ATTACK_MOVE" and env.player_turn == curr_player and is_ai_turn():
                     await asyncio.sleep(get_delay_seconds())
-                    post_action = ai_agents[curr_player].think(
-                        env.board, curr_player, env.current_turn, env.current_phase, mission
+                    post_action = agent.think(
+                        env.board,
+                        curr_player,
+                        env.current_turn,
+                        env.current_phase,
+                        mission,
                     )
                     post_action["type"] = "POST_ATTACK_MOVE"
                     await apply_action(post_action, curr_player, mission)
+
+                await send_json({"type": "ai_done", "player": curr_player})
+
+            if mode == "PLAY" and env and is_human_turn() and not game_over:
+                prepare_reinforce(env.player_turn)
+                await send_json(
+                    {
+                        "type": "reinforce_info",
+                        "armies_to_place": env.armies_to_place,
+                    }
+                )
+                await send_state_update()
         finally:
             await send_json({"type": "runner_stopped"})
 
@@ -285,36 +412,51 @@ async def ws_game_handler(ws: WebSocket) -> None:
             return
         if runner_task and not runner_task.done():
             return
-        if mode == "PLAY" and env.player_turn == 2:
-            runner_task = asyncio.create_task(run_play_ai())
-        elif mode == "WATCH":
-            runner_task = asyncio.create_task(run_watch_mode())
+        if is_ai_turn():
+            runner_task = asyncio.create_task(run_auto_players())
 
-    async def init_match(new_mode: str) -> None:
+    async def init_match(new_mode: str, payload: Optional[Dict[str, Any]] = None) -> None:
         nonlocal env, processor, coords, cols
         nonlocal ai_agents, mode, game_over, running
-        nonlocal p1_total_reward, p2_total_reward, action_log, delay_ms
+        nonlocal delay_ms, action_log
+        nonlocal num_players, player_map, human_players, player_scores
 
+        payload = payload or {}
         await stop_runner()
 
         mode = new_mode
-        env = RisikoEnvironment()
+        num_players = clamp_players(payload.get("num_players", num_players))
+        player_map = build_player_map(mode, num_players, payload)
+        human_players = {
+            p_id for p_id, meta in player_map.items() if meta.get("type") == "HUMAN"
+        }
+
+        env = RisikoEnvironment(num_players=num_players)
         processor = Processor(env.board)
         coords = territory_coords(env.board.n)
         cols = int(math.sqrt(env.board.n))
         game_over = False
         action_log = []
-        p1_total_reward = 0
-        p2_total_reward = 0
+        player_scores = {p_id: 0 for p_id in range(1, num_players + 1)}
+
+        ai_agents = {}
+        for p_id in range(1, num_players + 1):
+            if player_map[p_id]["type"] == "AI":
+                ai_agents[p_id] = build_ai_agent(env, p_id)
 
         if mode == "PLAY":
-            ai_agents = {2: build_ai_agent(env, 2)}
             delay_ms = DEFAULT_PLAY_AI_DELAY_MS
             running = True
         else:
-            ai_agents = {1: build_ai_agent(env, 1), 2: build_ai_agent(env, 2)}
             delay_ms = DEFAULT_WATCH_DELAY_MS
             running = True
+        if "delay_ms" in payload:
+            delay_ms = clamp_delay(payload.get("delay_ms"))
+
+        player_missions = {
+            str(p_id): format_mission(get_mission_for_player(p_id))
+            for p_id in range(1, num_players + 1)
+        }
 
         await send_json(
             {
@@ -322,6 +464,9 @@ async def ws_game_handler(ws: WebSocket) -> None:
                 "mode": mode,
                 "running": running,
                 "delay_ms": delay_ms,
+                "num_players": num_players,
+                "player_map": player_map,
+                "player_stats": build_player_stats(),
                 "board": {
                     "territories": serialize_board(env, coords),
                     "grid_cols": cols,
@@ -331,16 +476,22 @@ async def ws_game_handler(ws: WebSocket) -> None:
                 "current_player": env.player_turn,
                 "phase": env.current_phase,
                 "turn": env.current_turn,
-                "p1_mission": format_mission(env.p1_mission),
-                "p2_mission": format_mission(env.p2_mission),
+                "player_missions": player_missions,
+                "p1_mission": player_missions.get("1", ""),
+                "p2_mission": player_missions.get("2", ""),
                 "armies_to_place": env.armies_to_place,
+                "p1_score": int(player_scores.get(1, 0)),
+                "p2_score": int(player_scores.get(2, 0)),
                 "max_turns": Config.GAME["MAX_TURNS"],
+                "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
             }
         )
 
         prepare_reinforce(env.player_turn)
-        if mode == "PLAY" and env.player_turn == 1:
-            await send_json({"type": "reinforce_info", "armies_to_place": env.armies_to_place})
+        if mode == "PLAY" and is_human_turn():
+            await send_json(
+                {"type": "reinforce_info", "armies_to_place": env.armies_to_place}
+            )
 
         await send_state_update()
         await maybe_start_runner()
@@ -354,7 +505,7 @@ async def ws_game_handler(ws: WebSocket) -> None:
             if requested_mode not in ("PLAY", "WATCH"):
                 await send_json({"type": "error", "message": "Modalita non valida"})
                 return
-            await init_match(requested_mode)
+            await init_match(requested_mode, msg)
             return
 
         if command == "SET_SPEED":
@@ -382,7 +533,17 @@ async def ws_game_handler(ws: WebSocket) -> None:
                 if not mode:
                     await send_json({"type": "error", "message": "Nessuna modalita attiva"})
                     return
-                await init_match(mode)
+                preserved_types = {
+                    str(p_id): player_map[p_id]["type"] for p_id in player_map
+                }
+                await init_match(
+                    mode,
+                    {
+                        "num_players": num_players,
+                        "player_types": preserved_types,
+                        "delay_ms": delay_ms,
+                    },
+                )
                 return
 
             await send_json({"type": "error", "message": "CONTROL action non valida"})
@@ -390,11 +551,15 @@ async def ws_game_handler(ws: WebSocket) -> None:
 
         await send_json({"type": "error", "message": "Comando sconosciuto"})
 
+    default_map = build_player_map("PLAY", num_players, {})
     await send_json(
         {
             "type": "ready",
             "message": "Connessione aperta. Invia START_MODE con PLAY o WATCH.",
             "delay_bounds": {"min_ms": MIN_DELAY_MS, "max_ms": MAX_DELAY_MS},
+            "num_players": num_players,
+            "player_map": default_map,
+            "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
         }
     )
 
@@ -412,7 +577,9 @@ async def ws_game_handler(ws: WebSocket) -> None:
                 continue
 
             if mode != "PLAY":
-                await send_json({"type": "error", "message": "Input umano disponibile solo in PLAY"})
+                await send_json(
+                    {"type": "error", "message": "Input umano disponibile solo in PLAY"}
+                )
                 continue
 
             if not env:
@@ -423,12 +590,14 @@ async def ws_game_handler(ws: WebSocket) -> None:
                 await send_json({"type": "error", "message": "Partita terminata. Usa RESET."})
                 continue
 
-            if env.player_turn != 1:
+            if not is_human_turn():
                 await send_json({"type": "error", "message": "Attendi il tuo turno"})
                 continue
 
+            acting_player = env.player_turn
             action = parse_human_action(msg)
-            await apply_action(action, 1, env.p1_mission)
+            mission = get_mission_for_player(acting_player)
+            await apply_action(action, acting_player, mission)
             if not game_over:
                 await maybe_start_runner()
 

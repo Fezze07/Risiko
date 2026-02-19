@@ -15,9 +15,20 @@
 <body>
     <div id="app-container">
         <div class="landing-overlay">
-            <div class="landing-panel">
+            <div class="landing-panel lobby-panel">
                 <h2>Risiko Control Center</h2>
-                <p>Scegli la modalita di gioco.</p>
+                <p>Configura il match prima di avviare la sessione.</p>
+
+                <div class="lobby-form">
+                    <label for="num-players-input">Number of Players</label>
+                    <input id="num-players-input" type="number" min="2" max="8" value="2">
+                </div>
+
+                <div class="lobby-form">
+                    <div class="lobby-label">Player Types</div>
+                    <div id="player-types-list" class="player-types-list"></div>
+                </div>
+
                 <div class="landing-actions">
                     <button id="btn-mode-play" class="btn-cyber">Play vs AI</button>
                     <button id="btn-mode-watch" class="btn-cyber secondary">Watch AI Battle</button>

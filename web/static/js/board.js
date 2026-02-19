@@ -1,7 +1,97 @@
 import { gameState } from "./state.js";
 import { CONSTANTS } from "./constants.js";
-import { DOM, applySelectionHighlights } from "./ui.js";
+import { DOM, applySelectionHighlights, clearEncodingDebug, showEncodingDebug } from "./ui.js";
 import { onTerritoryClick } from "./game.js";
+
+function getPlayerMeta(playerId) {
+    if (!gameState.playerMap) return null;
+    return gameState.playerMap[playerId] || gameState.playerMap[String(playerId)] || null;
+}
+
+// Genera colori dinamici basati sull'ID del player
+export function getPlayerColor(playerID, totalPlayers) {
+    const hue = (playerID * (360 / totalPlayers));
+    return `hsl(${hue}, 70%, 50%)`;
+}
+
+function getOwnerColor(ownerId, totalPlayers) {
+    if (!ownerId) return "rgba(255, 255, 255, 0.10)";
+    const meta = getPlayerMeta(ownerId);
+    if (meta && meta.color) return meta.color;
+    return getPlayerColor(ownerId, totalPlayers);
+}
+
+function getTerritoryMap() {
+    const map = {};
+    if (!gameState.boardData || !gameState.boardData.territories) return map;
+    gameState.boardData.territories.forEach((t) => {
+        map[t.id] = t;
+    });
+    return map;
+}
+
+function normalizeEnemyRelative(ownerId, currentPlayerId, totalPlayers) {
+    if (!ownerId || ownerId === currentPlayerId) return 0.0;
+    let relative = (ownerId - currentPlayerId) % totalPlayers;
+    if (relative < 0) relative += totalPlayers;
+    if (relative === 0) relative = totalPlayers - 1;
+    if (totalPlayers <= 2) return 1.0;
+    const normalized = 0.1 + ((relative - 1) / (totalPlayers - 2)) * 0.9;
+    return Math.max(0.1, Math.min(1.0, normalized));
+}
+
+function computeEncodingFeatures(territory, territoryMap) {
+    const currentPlayerId = Number(gameState.currentPlayer || 1);
+    const observedMaxOwner = Math.max(
+        2,
+        ...Object.values(territoryMap).map((t) => Number(t.owner || 0)),
+    );
+    const totalPlayers = Math.max(2, Number(gameState.numPlayers || 2), observedMaxOwner);
+    const maxArmies = Math.max(1, Number(gameState.maxArmies || 1));
+
+    const isMine = territory.owner === currentPlayerId ? 1.0 : 0.0;
+    const armiesNormalized = Math.min(1.0, Number(territory.armies || 0) / maxArmies);
+    const enemyRelative = normalizeEnemyRelative(territory.owner, currentPlayerId, totalPlayers);
+
+    const enemyNeighborArmies = (territory.neighbors || []).reduce((sum, nId) => {
+        const neighbor = territoryMap[nId];
+        if (!neighbor) return sum;
+        if (!neighbor.owner || neighbor.owner === currentPlayerId) return sum;
+        return sum + Number(neighbor.armies || 0);
+    }, 0);
+    const maxThreat = maxArmies * Math.max(1, (territory.neighbors || []).length);
+    const threatLevel = Math.min(1.0, enemyNeighborArmies / maxThreat);
+
+    return { isMine, armiesNormalized, enemyRelative, threatLevel };
+}
+
+function pointerFromMouseEvent(evt) {
+    const boardRect = DOM.boardSvg.getBoundingClientRect();
+    return {
+        x: evt.clientX - boardRect.left,
+        y: evt.clientY - boardRect.top,
+    };
+}
+
+function bindHoverDebugEvents(targetElement, territoryId) {
+    targetElement.addEventListener("mouseenter", (evt) => {
+        const territoryMap = getTerritoryMap();
+        const territory = territoryMap[territoryId];
+        if (!territory) return;
+        const encoding = computeEncodingFeatures(territory, territoryMap);
+        showEncodingDebug(territoryId, encoding, pointerFromMouseEvent(evt));
+    });
+    targetElement.addEventListener("mousemove", (evt) => {
+        const territoryMap = getTerritoryMap();
+        const territory = territoryMap[territoryId];
+        if (!territory) return;
+        const encoding = computeEncodingFeatures(territory, territoryMap);
+        showEncodingDebug(territoryId, encoding, pointerFromMouseEvent(evt));
+    });
+    targetElement.addEventListener("mouseleave", () => {
+        clearEncodingDebug();
+    });
+}
 
 // ---- Board Rendering ----
 export function renderBoard() {
@@ -12,6 +102,7 @@ export function renderBoard() {
     const rows = gameState.boardData.grid_rows || 5;
     const svgW = cols * CONSTANTS.CELL_W + 160;
     const svgH = rows * CONSTANTS.CELL_H + 160;
+    const totalPlayers = Math.max(2, Number(gameState.numPlayers || 2));
 
     DOM.boardSvg.setAttribute("viewBox", `0 0 ${svgW} ${svgH}`);
     DOM.boardSvg.setAttribute("width", svgW);
@@ -24,30 +115,7 @@ export function renderBoard() {
     gameLayer.style.transform = `translate(${gameState.panX}px, ${gameState.panY}px) scale(${gameState.currentZoom})`;
     gameLayer.style.transformBox = "view-box";
     gameLayer.style.transformOrigin = "center";
-
     DOM.boardSvg.appendChild(gameLayer);
-
-    // Defs: filters & gradients
-    const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-    defs.innerHTML = `
-        <filter id="glow-p1" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <filter id="glow-p2" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
-            <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <linearGradient id="grad-p1" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#1d4ed8;stop-opacity:0.65"/>
-            <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.45"/>
-        </linearGradient>
-        <linearGradient id="grad-p2" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:#b91c1c;stop-opacity:0.65"/>
-            <stop offset="100%" style="stop-color:#ef4444;stop-opacity:0.45"/>
-        </linearGradient>
-    `;
-    DOM.boardSvg.appendChild(defs);
 
     // Connections
     const linesGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -55,14 +123,16 @@ export function renderBoard() {
     gameLayer.appendChild(linesGroup);
 
     const tMap = {};
-    territories.forEach(t => { tMap[t.id] = t; });
+    territories.forEach((t) => {
+        tMap[t.id] = t;
+    });
 
     const drawnPairs = new Set();
-    territories.forEach(t => {
+    territories.forEach((t) => {
         const cx1 = t.x + CONSTANTS.CELL_W / 2;
         const cy1 = t.y + CONSTANTS.CELL_H / 2;
-        t.neighbors.forEach(nId => {
-            const pairKey = Math.min(t.id, nId) + "-" + Math.max(t.id, nId);
+        t.neighbors.forEach((nId) => {
+            const pairKey = `${Math.min(t.id, nId)}-${Math.max(t.id, nId)}`;
             if (drawnPairs.has(pairKey)) return;
             drawnPairs.add(pairKey);
             const n = tMap[nId];
@@ -86,10 +156,10 @@ export function renderBoard() {
     cellsGroup.setAttribute("class", "territories");
     gameLayer.appendChild(cellsGroup);
 
-    territories.forEach(t => {
+    territories.forEach((t) => {
         const g = document.createElementNS("http://www.w3.org/2000/svg", "g");
         g.setAttribute("data-id", t.id);
-        g.setAttribute("class", `territory-group`);
+        g.setAttribute("class", "territory-group");
 
         // Cell rect
         const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
@@ -101,8 +171,11 @@ export function renderBoard() {
         rect.setAttribute("ry", CONSTANTS.CELL_RX);
         rect.setAttribute("data-id", t.id);
         rect.setAttribute("class", `territory-cell owner-${t.owner || 0}`);
-        if (t.owner === 1) rect.setAttribute("fill", "url(#grad-p1)");
-        else if (t.owner === 2) rect.setAttribute("fill", "url(#grad-p2)");
+
+        const ownerColor = getOwnerColor(t.owner, totalPlayers);
+        rect.style.fill = ownerColor;
+        rect.style.fillOpacity = t.owner ? "0.24" : "0.08";
+        rect.style.stroke = t.owner ? ownerColor : "rgba(255,255,255,0.24)";
         rect.addEventListener("click", () => onTerritoryClick(t.id));
         g.appendChild(rect);
 
@@ -132,26 +205,31 @@ export function renderBoard() {
         ownerText.setAttribute("y", t.y + CONSTANTS.CELL_H - 10);
         ownerText.setAttribute("text-anchor", "middle");
         ownerText.setAttribute("class", "territory-owner-icon");
-        ownerText.textContent = t.owner === 1 ? "P1" : t.owner === 2 ? "P2" : "-";
-        ownerText.style.fill = t.owner === 1 ? "#60a5fa" : t.owner === 2 ? "#f87171" : "#64748b";
+        ownerText.textContent = t.owner ? `P${t.owner}` : "-";
+        ownerText.style.fill = t.owner ? ownerColor : "#64748b";
         ownerText.style.fontSize = "10px";
         ownerText.style.fontWeight = "600";
         g.appendChild(ownerText);
 
+        bindHoverDebugEvents(g, t.id);
         cellsGroup.appendChild(g);
     });
 
+    clearEncodingDebug();
     applySelectionHighlights();
 }
 
 // ---- Update Board Visuals (without re-rendering) ----
 export function updateBoardVisuals() {
     if (!gameState.boardData || !gameState.boardData.territories) return;
+    const totalPlayers = Math.max(2, Number(gameState.numPlayers || 2));
 
     const tMap = {};
-    gameState.boardData.territories.forEach(t => { tMap[t.id] = t; });
+    gameState.boardData.territories.forEach((t) => {
+        tMap[t.id] = t;
+    });
 
-    document.querySelectorAll(".territory-group").forEach(g => {
+    document.querySelectorAll(".territory-group").forEach((g) => {
         const id = parseInt(g.getAttribute("data-id"), 10);
         const t = tMap[id];
         if (!t) return;
@@ -160,9 +238,10 @@ export function updateBoardVisuals() {
         if (rect) {
             rect.classList.remove("owner-1", "owner-2", "owner-0", "owner-null");
             rect.classList.add(`owner-${t.owner || 0}`);
-            if (t.owner === 1) rect.setAttribute("fill", "url(#grad-p1)");
-            else if (t.owner === 2) rect.setAttribute("fill", "url(#grad-p2)");
-            else rect.removeAttribute("fill");
+            const ownerColor = getOwnerColor(t.owner, totalPlayers);
+            rect.style.fill = ownerColor;
+            rect.style.fillOpacity = t.owner ? "0.24" : "0.08";
+            rect.style.stroke = t.owner ? ownerColor : "rgba(255,255,255,0.24)";
         }
 
         const armyEl = g.querySelector(".territory-armies");
@@ -174,8 +253,9 @@ export function updateBoardVisuals() {
 
         const ownerEl = g.querySelector(".territory-owner-icon");
         if (ownerEl) {
-            ownerEl.textContent = t.owner === 1 ? "P1" : t.owner === 2 ? "P2" : "-";
-            ownerEl.style.fill = t.owner === 1 ? "#60a5fa" : t.owner === 2 ? "#f87171" : "#64748b";
+            const ownerColor = getOwnerColor(t.owner, totalPlayers);
+            ownerEl.textContent = t.owner ? `P${t.owner}` : "-";
+            ownerEl.style.fill = t.owner ? ownerColor : "#64748b";
         }
     });
 
@@ -216,4 +296,3 @@ export function flashTerritory(id, className) {
         }
     }, 1100);
 }
-

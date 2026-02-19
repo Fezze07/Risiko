@@ -6,9 +6,36 @@ import { handleMessage, sendAction, sendControl, sendPass, setSpeed, startMode }
 
 let pendingMode = null;
 
+function clampPlayers(value) {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return 2;
+    return Math.max(2, Math.min(8, Math.round(parsed)));
+}
+
+function parseLobbyConfig() {
+    const params = new URLSearchParams(window.location.search);
+    const modeParam = (params.get("mode") || "").toUpperCase();
+    const requestedPlayers = clampPlayers(params.get("players") || 2);
+    const typesRaw = (params.get("types") || "").split(",").map((v) => String(v || "").trim().toUpperCase());
+    const playerTypes = {};
+    for (let i = 1; i <= requestedPlayers; i += 1) {
+        const role = typesRaw[i - 1];
+        playerTypes[String(i)] = role === "HUMAN" || role === "H" ? "HUMAN" : "AI";
+    }
+    if (modeParam !== "WATCH" && !Object.values(playerTypes).includes("HUMAN")) {
+        playerTypes["1"] = "HUMAN";
+    }
+    gameState.lobbyConfig = {
+        numPlayers: requestedPlayers,
+        playerTypes,
+    };
+}
+
 function connect() {
     const protocol = location.protocol === "https:" ? "wss" : "ws";
-    gameState.ws = new WebSocket(`${protocol}://${location.host}/ws/game`);
+    const wsUrl = new URL(`${protocol}://${location.host}/ws/game`);
+    wsUrl.searchParams.set("num_players", String(gameState.lobbyConfig.numPlayers || 2));
+    gameState.ws = new WebSocket(wsUrl.toString());
 
     gameState.ws.onopen = () => {
         DOM.connStatus.className = "status-connected";
@@ -16,7 +43,7 @@ function connect() {
         addLog("[INFO] Connesso al server", "log-info");
         syncControlState();
         if (pendingMode) {
-            startMode(pendingMode);
+            startMode(pendingMode, gameState.lobbyConfig);
             pendingMode = null;
         }
     };
@@ -145,6 +172,7 @@ if (DOM.battleClose) {
 }
 const params = new URLSearchParams(window.location.search);
 const modeParam = (params.get("mode") || "").toUpperCase();
+parseLobbyConfig();
 if (modeParam === "PLAY" || modeParam === "WATCH") {
     pendingMode = modeParam;
 }

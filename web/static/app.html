@@ -32,6 +32,9 @@
                     <span>TURN:</span> <span id="turn-info">0</span>
                 </div>
                 <div class="status-item">
+                    <span>PLAYER:</span> <span id="current-player-label">P1</span>
+                </div>
+                <div class="status-item">
                     <span>PHASE:</span> <span id="phase-value">INIT</span>
                 </div>
                 <div class="status-item" id="connection-status">
@@ -104,16 +107,7 @@
 
             <!-- CENTER PANEL: SCORES + MAP -->
             <section class="center-panel">
-                <div class="stats-bar">
-                    <div class="score-card p1">
-                        <span id="score-p1-label">PLAYER 1</span>
-                        <span id="score-p1" class="score-value">0</span>
-                    </div>
-                    <div class="score-card p2">
-                        <span id="score-p2-label">AI AGENT</span>
-                        <span id="score-p2" class="score-value">0</span>
-                    </div>
-                </div>
+                <div class="stats-bar" id="stats-bar"></div>
 
                 <main class="main-board">
                     <div id="phase-prompt" class="phase-prompt hidden">
@@ -123,6 +117,7 @@
                         </div>
                     </div>
                     <svg id="board-svg" preserveAspectRatio="xMidYMid meet"></svg>
+                    <div id="territory-tooltip" class="territory-tooltip hidden"></div>
 
                     <div class="zoom-controls">
                         <button id="btn-zoom-in" title="Zoom In">+</button>
@@ -138,7 +133,20 @@
 
             <!-- RIGHT PANEL: LOGS -->
             <aside class="right-panel">
-                <section class="log-panel" style="height: 100%; max-height: none; border: none; background: transparent;">
+                <div class="panel-section leaderboard-panel">
+                    <h3>Leaderboard</h3>
+                    <div id="leaderboard-current" class="leaderboard-current">Current: P1</div>
+                    <div id="player-legend" class="player-legend"></div>
+                </div>
+
+                <div class="panel-section encoding-panel">
+                    <h3>Encoding Debug</h3>
+                    <div id="encoding-debug" class="encoding-debug">
+                        Hover su un territorio per vedere le feature NN.
+                    </div>
+                </div>
+
+                <section class="log-panel">
                     <div class="log-header">Battle Feed</div>
                     <div id="log-container"></div>
                 </section>

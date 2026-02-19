@@ -55,6 +55,13 @@
 }
 
 /* Common Panel Styling */
+.panel-section {
+    background: rgba(6, 10, 28, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+}
+
 .panel-section h3 {
     font-size: 12px;
     text-transform: uppercase;
@@ -63,6 +70,125 @@
     margin-bottom: 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     padding-bottom: 8px;
+}
+
+.leaderboard-panel {
+    flex-shrink: 0;
+}
+
+.leaderboard-current {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-highlight);
+    margin-bottom: 10px;
+}
+
+.player-legend {
+    display: grid;
+    gap: 8px;
+}
+
+.legend-row {
+    display: grid;
+    grid-template-columns: 28px 1fr auto;
+    align-items: center;
+    gap: 10px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.24);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    position: relative;
+    overflow: hidden;
+}
+
+.legend-row.current-turn {
+    border-color: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+}
+
+.legend-rank {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    font-size: 10px;
+    font-weight: 700;
+    color: #0b1020;
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.25);
+}
+
+.legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+}
+
+.legend-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.legend-name {
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.legend-badges {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-role {
+    color: var(--text-muted);
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    text-transform: uppercase;
+}
+
+.legend-stats {
+    display: grid;
+    grid-auto-flow: column;
+    gap: 6px;
+    align-items: center;
+}
+
+.legend-chip {
+    padding: 2px 6px;
+    border-radius: 6px;
+    font-size: 9px;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.legend-score {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text-highlight);
+    text-align: right;
+}
+
+.encoding-panel {
+    flex-shrink: 0;
+}
+
+.encoding-debug {
+    min-height: 92px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--text-highlight);
+    white-space: pre-line;
 }
 
 .score-card {
@@ -92,28 +218,29 @@
 
 /* Stats Bar (Top of Center) */
 .stats-bar {
-    display: flex;
-    gap: 12px;
-    height: 60px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 10px;
+    min-height: 60px;
     flex-shrink: 0;
 }
 
 .stats-bar .score-card {
-    flex: 1;
     margin-bottom: 0;
-    height: 100%;
-    justify-content: center;
-    gap: 20px;
+    min-height: 60px;
+    justify-content: space-between;
+    gap: 12px;
     background: var(--bg-panel);
     border: var(--border-thin);
 }
 
-.stats-bar .score-card.p1 {
-    border-left: 4px solid var(--p1-color);
+.stats-bar .score-card .score-value {
+    font-size: 18px;
 }
 
-.stats-bar .score-card.p2 {
-    border-left: 4px solid var(--p2-color);
+.score-card.player-score {
+    border-left-width: 4px;
+    border-left-style: solid;
 }
 
 /* Mission Box */

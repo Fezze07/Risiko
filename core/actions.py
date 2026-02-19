@@ -53,12 +53,25 @@ class ActionHandler:
                 reward += Config.REWARD.get('REINFORCE_SAFE_PENALTY', -50)
                 extra_info['reinforce_safe_penalty'] = True
 
-        # Penalizza stacking su territori già molto pieni (progressivo)
+        # Smart Stacking: penalizza pesantemente solo se hai alternative non sature
         stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
         armies_before = t_dest.armies - to_add
         if stack_threshold and armies_before >= stack_threshold:
+            # Controlla se il giocatore ha territori NON saturi
+            has_alternative = any(
+                t.owner_id == player_id and t.armies < stack_threshold
+                for t in board.territories.values()
+            )
+            
             excess = t_dest.armies - stack_threshold
-            reward += Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
+            penalty = Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
+            
+            # Se NON ha alternative, la penalità è dimezzata
+            if not has_alternative:
+                penalty = int(penalty * 0.2)
+                extra_info['inevitable_stacking'] = True
+            
+            reward += penalty
             extra_info['stack_penalty'] = True
             extra_info['stack_excess'] = excess
 
@@ -85,7 +98,8 @@ class ActionHandler:
         rolls_def = get_random_dice(n_dice_def)
         extra_info: Dict[str, Any] = {
             'rolls_att': rolls_att,
-            'rolls_def': rolls_def
+            'rolls_def': rolls_def,
+            'defender_id': defender_id,
         }
         couples = min(len(rolls_att), len(rolls_def))
 
@@ -160,17 +174,27 @@ class ActionHandler:
         min_move = min(movable, max(1, Config.GAME.get("MIN_POST_CONQUEST_MOVE", 1)))
         
         # Quante ne sposta effettivamente l'IA (qty è tra 0 e 1)
-        # Se qty è 1.0 sposta tutto il possibile (movable)
-        # Se qty è 0.0 sposta il minimo (min_move)
         amount_ratio = qty
         amount = min_move + int((movable - min_move) * amount_ratio)
+        
+        reward = 0
+        extra_info = {'post_attack_move_qty': amount}
+        
+        # Se spostando tutto lasciamo solo 1 armata in un territorio che è ancora sul fronte,
+        # e avevamo truppe a sufficienza, forziamo il mantenimento di un presidio (es. 2-3 armate).
+        src_still_frontline = self._has_enemy_neighbors(board, player_id, src_id)
+        if src_still_frontline and t_src.armies > 2:
+            # Vogliamo tenere almeno 2 armate nella sorgente se possibile
+            safe_to_move = max(min_move, t_src.armies - 2)
+            if amount > safe_to_move:
+                amount = safe_to_move
+                reward += Config.REWARD.get('AVOID_RISK_BONUS', 0)
+                extra_info['heuristic_safe_move'] = True
+        
         amount = max(min_move, min(amount, movable))
         
         t_src.armies -= amount
         t_dest.armies += amount
-        
-        reward = 0
-        extra_info = {'post_attack_move_qty': amount}
         
         # Check se il nuovo territorio è rischioso
         enemies = [n for n in t_dest.neighbors if board.territories[n].owner_id != player_id]
@@ -263,7 +287,6 @@ class ActionHandler:
         if armies > 3:
             return 3
         return armies - 1
-
 
 
 

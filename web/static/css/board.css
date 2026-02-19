@@ -18,6 +18,22 @@
     object-fit: contain;
 }
 
+.territory-tooltip {
+    position: absolute;
+    pointer-events: none;
+    z-index: 20;
+    max-width: 260px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(3, 6, 20, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    line-height: 1.4;
+    color: #dbeafe;
+    white-space: pre-line;
+}
+
 /* Zoom Controls Overlay */
 .zoom-controls {
     position: absolute;
@@ -173,10 +189,22 @@
     pointer-events: none;
 }
 
+.territory-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    fill: rgba(255, 255, 255, 0.75);
+    pointer-events: none;
+}
+
 .territory-armies {
     font-size: 14px;
     font-weight: 700;
     fill: #fff;
+    pointer-events: none;
+}
+
+.territory-owner-icon {
+    font-family: 'JetBrains Mono', monospace;
     pointer-events: none;
 }
 

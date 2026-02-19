@@ -8,13 +8,14 @@ class Config:
     DEBUG: Dict[str, Any] = {
         "LONG_SESSION": True
     }
+
     # =========================================
     # 🌍 GAME SETTINGS (Il Mondo Fisico)
     # =========================================
     GAME: Dict[str, Any] = {
-        "NUM_PLAYERS": 2,
+        "NUM_PLAYERS": 4,
         "NUM_TERRITORIES": 25,
-        "MAX_TURNS": 130,
+        "MAX_TURNS": 100,
         "MAX_ARMIES_PER_TERRITORY": 30,
         "MAX_TOTAL_ARMIES": 100,
         "STARTING_ARMIES": 1,
@@ -22,7 +23,7 @@ class Config:
         "MIN_BONUS": 1,
         "MIN_REINFORCE_QTY": 0.05,
         "MIN_POST_CONQUEST_MOVE": 2,
-        "INITIAL_PLACEMENT_TOTAL": 10,
+        "INITIAL_PLACEMENT_TOTAL": 12,
         "INITIAL_PLACEMENT_STEP": 3,
         "PHASES": ["INITIAL_PLACEMENT", "REINFORCE", "ATTACK", "POST_ATTACK_MOVE", "MANEUVER"]
     }
@@ -63,8 +64,8 @@ class Config:
         # L'output sarà: [Azione, Sorgente, Destinazione, Quantità]
         "OUTPUT_SIZE": 4,
         "EPSILON-GREEDY": 0.05,
-        "ATTACK_DECISION_THRESHOLD": 0.6,
-        "MANEUVER_DECISION_THRESHOLD": 0.6,
+        "ATTACK_DECISION_THRESHOLD": 0.45,
+        "MANEUVER_DECISION_THRESHOLD": 0.45,
         "ATTACK_MIN_RATIO": 1.15
     }
 
@@ -98,7 +99,7 @@ class Config:
         "DATASET_PATH": "dataset/human_dataset.jsonl",
         "MIN_SAMPLES": 100,
         "SAMPLE_SIZE": 512,
-        "IMITATION_WEIGHT": 500.0,
+        "IMITATION_WEIGHT": 100.0,
     }
 
     # =========================================
@@ -106,39 +107,41 @@ class Config:
     # =================================s========
     REWARD: Dict[str, int] = {
         # --- ESITI PARTITA ---
-        "WIN": 10000,
-        "LOSS": -7000,
+        "WIN": 6000,
+        "LOSS": -8000,
+        "STALEMATE_PENALTY": -4000,
         # --- RINFORZI ---
         "REINFORCE_ARMY": 0,
         "REINFORCE_STRATEGIC_MULT": 4,
         "REINFORCE_SAFE_MULT": 0,
-        "REINFORCE_SAFE_PENALTY": -15,
+        "REINFORCE_SAFE_PENALTY": -25,
         "REINFORCE_STACK_PENALTY": -25,
-        "REINFORCE_STACK_THRESHOLD": 8,
+        "REINFORCE_STACK_THRESHOLD": 12,
         "REINFORCE_REPEAT_PENALTY": -30,
-        "PASS_REPEAT_PENALTY": -13,
-        "ARMY_LIMIT_PENALTY": -80,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 30,
+        "CONQUER_TERRITORY": 180,
         "LOSE_TERRITORY": -300,
-        "KILL_ENEMY_ARMY": 10,
+        "KILL_ENEMY_ARMY": 45,
         "LOSE_ARMY": -8,
-        "ATTACK_RISK_PENALTY": -150,
+        "ATTACK_RISK_PENALTY": -450,
         "AVOID_RISK_BONUS": 15,
-        "LEAVE_ONE_ARMY_PENALTY": -300,
+        "LEAVE_ONE_ARMY_PENALTY": -850,
         "CONQUEST_STREAK_CAP": 3,
+        "PASS_REPEAT_PENALTY": -10,
+        "PASS_PENALTY_CAP": -300,
+        "ARMY_LIMIT_PENALTY": -80,
         # --- DIFESA / PRESIDIO ---
         "DEFEND_BONUS": 25,
         "DEFEND_HOLD_TERRITORY": 70,
-        "FRONTLINE_STABLE_BONUS": 100,
-        "FRONTLINE_FORTIFIED_BONUS": 150,
+        "FRONTLINE_STABLE_BONUS": 250,
+        "FRONTLINE_FORTIFIED_BONUS": 400,
         "VALID_SAFE_ACTION_BONUS": 8,
         # --- MANOVRA ---
         "MANEUVER_CORRECTLY": 10,
         "MANEUVER_PENALTY": -40,
         "MANEUVER_STRATEGIC": 60,
         # --- CONTINENTI / CONTROLLO MAPPA ---
-        "HOLD_CONTINENT": 80,
+        "HOLD_CONTINENT": 70,
         "CONQUER_CONTINENT": 150,
         "LOSE_CONTINENT": -2000,
         # --- PROGRESSO VERSO LA VITTORIA ---
@@ -148,7 +151,6 @@ class Config:
         "INVALID_MOVE": -100,
         "INVALID_MOVE_ATTACK": -200,
         "CONSECUTIVE_INVALID_MOVE": -500,
-        "STALEMATE_PENALTY": -30,
         "GAME_LENGTH_PENALTY": -2,
     }
 

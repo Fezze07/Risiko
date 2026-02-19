@@ -6,6 +6,9 @@
     overflow: hidden;
     height: 100%;
     width: 100%;
+    background: rgba(6, 10, 28, 0.75);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-sm);
 }
 
 .log-header {
@@ -368,6 +371,10 @@
     text-align: center;
 }
 
+.lobby-panel {
+    text-align: left;
+}
+
 .landing-panel h2 {
     margin: 0 0 10px;
     font-size: 30px;
@@ -384,6 +391,70 @@
 .landing-actions {
     display: grid;
     gap: 12px;
+}
+
+.lobby-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.lobby-form label,
+.lobby-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+}
+
+#num-players-input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: var(--text-highlight);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    padding: 10px 12px;
+    width: 120px;
+}
+
+.player-types-list {
+    display: grid;
+    gap: 8px;
+}
+
+.player-type-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.player-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+}
+
+.player-type-label {
+    flex: 1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-highlight);
+}
+
+.player-type-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
 }
 
 .control-bar {

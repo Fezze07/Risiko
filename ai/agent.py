@@ -30,7 +30,13 @@ class Agent:
             return self._get_random_action(phase, board, player_id)
 
         # 1. Encoding (Board -> Vettore)
-        state = self.processor.encode_state(board, player_id, current_turn, phase, mission_data)
+        state = self.processor.encode_state(
+            board,
+            current_player_id=player_id,
+            current_turn=current_turn,
+            current_phase=phase,
+            mission_data=mission_data,
+        )
 
         # 2. Forward Pass (Vettore -> Output NN)
         output = self.nn.forward(state)

@@ -1,10 +1,12 @@
 import math
 import os
-from typing import Dict, List, Any, Tuple
+from typing import Dict, List, Any
+
+from ai.agent import Agent
 from config import Config
 from core.environment import RisikoEnvironment
-from ai.agent import Agent
 from utils.trainer_utils import TrainerUtils
+
 
 # Carica best_agent.pkl per creare un agente AI.
 def build_ai_agent(env: RisikoEnvironment, agent_id: int = 2) -> Agent:

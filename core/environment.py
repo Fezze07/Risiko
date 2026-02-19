@@ -7,8 +7,12 @@ from core.actions import ActionHandler
 
 
 class RisikoEnvironment:
-    def __init__(self) -> None:
-        self.board: Board = Board()
+    def __init__(self, num_players: Optional[int] = None) -> None:
+        configured_players = int(Config.GAME.get("NUM_PLAYERS", 2))
+        resolved_players = num_players if num_players is not None else configured_players
+        self.num_players: int = max(2, int(resolved_players))
+
+        self.board: Board = Board(num_players=self.num_players)
         self.player_turn: int = 1
         self.current_turn: int = 0
         self.current_phase: str = 'REINFORCE'
@@ -17,6 +21,9 @@ class RisikoEnvironment:
         self.armies_to_place_total: int = 0
         self.conquest_streak: int = 0
         self.max_armies: int = Config.GAME['MAX_ARMIES_PER_TERRITORY']
+        self.setup_placed: Dict[int, int] = {}
+        self.player_missions: Dict[int, Dict[str, Any]] = {}
+        # Compat legacy (training a 2 player).
         self.p1_setup_placed: int = 0
         self.p2_setup_placed: int = 0
         self.p1_mission: Dict[str, Any] = {}
@@ -25,10 +32,27 @@ class RisikoEnvironment:
         self.pending_attack_src: Optional[int] = None
         self.pending_attack_dest: Optional[int] = None
         self.action_handler = ActionHandler(self.max_armies)
-        self.progress_cache = {1: 0, 2: 0}
-        self.repeat_reinforce = {1: {"last": None, "count": 0}, 2: {"last": None, "count": 0}}
-        self.repeat_pass = {1: 0, 2: 0}
+        self.progress_cache: Dict[int, int] = {}
+        self.repeat_reinforce: Dict[int, Dict[str, Any]] = {}
+        self.repeat_pass: Dict[int, int] = {}
         self.reset()
+
+    def _player_ids(self):
+        return range(1, self.num_players + 1)
+
+    def _next_player_id(self, current: int) -> int:
+        if self.num_players <= 1:
+            return 1
+        return (current % self.num_players) + 1
+
+    def get_player_mission(self, player_id: int) -> Dict[str, Any]:
+        return self.player_missions.get(player_id, {})
+
+    def _sync_legacy_aliases(self) -> None:
+        self.p1_setup_placed = self.setup_placed.get(1, 0)
+        self.p2_setup_placed = self.setup_placed.get(2, 0)
+        self.p1_mission = self.player_missions.get(1, {})
+        self.p2_mission = self.player_missions.get(2, {})
 
     def _has_reinforce_space(self, player_id: int) -> bool:
         return any(
@@ -37,24 +61,28 @@ class RisikoEnvironment:
         )
 
     def reset(self) -> Board:
-        self.board.reset()
+        self.board.reset(self.num_players)
         self.player_turn = 1
         self.current_turn = 0
         self.current_phase = 'INITIAL_PLACEMENT'
         self.has_reinforced = False
         self.armies_to_place = Config.GAME['INITIAL_PLACEMENT_STEP']
         self.armies_to_place_total = Config.GAME['INITIAL_PLACEMENT_STEP']
-        self.p1_setup_placed = 0
-        self.p2_setup_placed = 0
+        self.setup_placed = {p_id: 0 for p_id in self._player_ids()}
+        self.player_missions = {}
+        for p_id in self._player_ids():
+            _, mission = MissionManager.assign_mission()
+            self.player_missions[p_id] = mission
         self.conquest_streak = 0
         self.consecutive_invalid_moves = 0
         self.pending_attack_src = None
         self.pending_attack_dest = None
-        self.progress_cache = {1: 0, 2: 0}
-        self.repeat_reinforce = {1: {"last": None, "count": 0}, 2: {"last": None, "count": 0}}
-        self.repeat_pass = {1: 0, 2: 0}
-        _, self.p1_mission = MissionManager.assign_mission()
-        _, self.p2_mission = MissionManager.assign_mission()
+        self.progress_cache = {p_id: 0 for p_id in self._player_ids()}
+        self.repeat_reinforce = {
+            p_id: {"last": None, "count": 0} for p_id in self._player_ids()
+        }
+        self.repeat_pass = {p_id: 0 for p_id in self._player_ids()}
+        self._sync_legacy_aliases()
         return self.board
 
     def step(self, action: Dict[str, Any], player_id: int) -> Tuple[int, bool, Dict[str, Any]]:
@@ -79,17 +107,17 @@ class RisikoEnvironment:
             )
             info.update(action_extra)
             self.armies_to_place -= placed
-            
-            if player_id == 1:
-                self.p1_setup_placed += placed
-            else:
-                self.p2_setup_placed += placed
+            self.setup_placed[player_id] = self.setup_placed.get(player_id, 0) + placed
+            self._sync_legacy_aliases()
 
             # Controllo cambio turno / fase
             if self.armies_to_place <= 0:
                 # Turno finito per questo player nel setup
                 total_needed = Config.GAME['INITIAL_PLACEMENT_TOTAL']
-                if self.p1_setup_placed >= total_needed and self.p2_setup_placed >= total_needed:
+                if all(
+                    self.setup_placed.get(p_id, 0) >= total_needed
+                    for p_id in self._player_ids()
+                ):
                     # Setup finito per entrambi -> Inizia partita vera
                     self.current_phase = 'REINFORCE'
                     self.player_turn = 1
@@ -99,7 +127,7 @@ class RisikoEnvironment:
                     self.has_reinforced = False
                 else:
                     # Passa turno all'avversario
-                    self.player_turn = 3 - self.player_turn # 1->2, 2->1
+                    self.player_turn = self._next_player_id(self.player_turn)
                     self.armies_to_place = Config.GAME['INITIAL_PLACEMENT_STEP']
                     self.armies_to_place_total = Config.GAME['INITIAL_PLACEMENT_STEP']
                     
@@ -129,19 +157,23 @@ class RisikoEnvironment:
             self.repeat_pass[player_id] += 1
             if self.current_phase == 'REINFORCE':
                 if self.armies_to_place > 0 and self._has_reinforce_space(player_id):
-                    return Config.REWARD['INVALID_MOVE'], False, {'error': 'Hai ancora truppe da piazzare'}
+                    return Config.REWARD['INVALID_MOVE'], False, {'error': 'Hai ancora truppe da piazzare (regola Risiko: no PASS in REINFORCE)'}
                 self.current_phase = 'ATTACK'
-                if self.repeat_pass[player_id] > 1:
-                    reward += Config.REWARD['PASS_REPEAT_PENALTY']
-                    info['repeat_pass_penalty'] = True
-                return reward, False, info
+                return 0, False, info
 
             if self.current_phase == 'ATTACK':
                 self.current_phase = 'MANEUVER'
                 self.conquest_streak = 0
                 if self.repeat_pass[player_id] > 1:
-                    reward += Config.REWARD['PASS_REPEAT_PENALTY']
+                    # Penalità progressiva: -5, -10, -15...
+                    multiplier = self.repeat_pass[player_id] - 1
+                    pass_penalty = Config.REWARD['PASS_REPEAT_PENALTY'] * multiplier
+                    # Cap della penalità
+                    pass_penalty = max(pass_penalty, Config.REWARD.get('PASS_PENALTY_CAP', -100))
+                    
+                    reward += pass_penalty
                     info['repeat_pass_penalty'] = True
+                    info['pass_count'] = self.repeat_pass[player_id]
                 return reward, False, info
 
             if self.current_phase == 'POST_ATTACK_MOVE':
@@ -150,8 +182,15 @@ class RisikoEnvironment:
             if self.current_phase == 'MANEUVER':
                 self._end_turn()
                 if self.repeat_pass[player_id] > 1:
-                    reward += Config.REWARD['PASS_REPEAT_PENALTY']
+                    # Penalità progressiva
+                    multiplier = self.repeat_pass[player_id] - 1
+                    pass_penalty = Config.REWARD['PASS_REPEAT_PENALTY'] * multiplier
+                    # Cap della penalità
+                    pass_penalty = max(pass_penalty, Config.REWARD.get('PASS_PENALTY_CAP', -100))
+
+                    reward += pass_penalty
                     info['repeat_pass_penalty'] = True
+                    info['pass_count'] = self.repeat_pass[player_id]
                 return reward, False, info
 
         if action['type'] != self.current_phase:
@@ -172,7 +211,6 @@ class RisikoEnvironment:
                 return self._handle_invalid_move(err_msg, info)
 
             self.consecutive_invalid_moves = 0
-            self.repeat_pass[player_id] = 0
             last = self.repeat_reinforce[player_id]["last"]
             if action.get("dest") == last:
                 self.repeat_reinforce[player_id]["count"] += 1
@@ -211,10 +249,13 @@ class RisikoEnvironment:
                 self.current_phase = 'ATTACK'
 
         elif self.current_phase == 'ATTACK':
-            self.repeat_pass[player_id] = 0
+            # Reset pass solo se l'attacco è valido (ma non necessariamente vincente)
+            # In questo modo, "provare" ad attaccare interrompe la serie di passività
             is_valid, err_msg = ActionValidator.validate_attack(self.board, player_id, action)
             if not is_valid:
                 return self._handle_invalid_move(err_msg, info)
+
+            self.repeat_pass[player_id] = 0
 
             self.consecutive_invalid_moves = 0
             combat_reward, conquered, opponent_reward, extra = self.action_handler.execute_attack(
@@ -274,7 +315,6 @@ class RisikoEnvironment:
             self.current_phase = 'ATTACK'
 
         elif self.current_phase == 'MANEUVER':
-            self.repeat_pass[player_id] = 0
             is_valid, err_msg = ActionValidator.validate_maneuver(
                 self.board,
                 player_id,
@@ -283,6 +323,8 @@ class RisikoEnvironment:
             )
             if not is_valid:
                 return self._handle_invalid_move(err_msg, info)
+
+            self.repeat_pass[player_id] = 0
 
             self.consecutive_invalid_moves = 0
             reward, action_extra = self.action_handler.execute_maneuver(self.board, player_id, action)
@@ -303,7 +345,9 @@ class RisikoEnvironment:
             done = True
             if winner == player_id:
                 reward += Config.REWARD['WIN']
-            elif winner != -1:
+            elif winner == -1:
+                reward += Config.REWARD.get('STALEMATE_PENALTY', -4000)
+            elif winner != 0:
                 reward += Config.REWARD['LOSS']
 
         return reward, done, info
@@ -430,12 +474,12 @@ class RisikoEnvironment:
         max_total = Config.GAME['MAX_TOTAL_ARMIES']
 
         if current_total + bonus > max_total:
-            return max_total - (current_total + bonus)
+            return max(0, max_total - current_total)
 
         return bonus
 
     def next_turn(self) -> None:
-        self.player_turn = 2 if self.player_turn == 1 else 1
+        self.player_turn = self._next_player_id(self.player_turn)
         self.current_turn += 1
 
     def _end_turn(self) -> None:
@@ -443,7 +487,9 @@ class RisikoEnvironment:
         self.armies_to_place = 0
         self.armies_to_place_total = 0
         self._clear_pending_attack_move()
-        self.repeat_reinforce = {1: {"last": None, "count": 0}, 2: {"last": None, "count": 0}}
+        self.repeat_reinforce = {
+            p_id: {"last": None, "count": 0} for p_id in self._player_ids()
+        }
         if hasattr(self, '_continent_reward_given'):
             del self._continent_reward_given
         self.next_turn()
@@ -454,17 +500,19 @@ class RisikoEnvironment:
         self.pending_attack_dest = None
 
     def is_game_over(self) -> Tuple[int, int]:
-        p1_lands = self.board.get_player_territories(1)
-        p2_lands = self.board.get_player_territories(2)
-        if not p2_lands:
-            return 1, 2
-        if not p1_lands:
-            return 2, 1
+        alive_players = [
+            p_id for p_id in self._player_ids() if self.board.get_player_territories(p_id)
+        ]
+        if len(alive_players) == 1:
+            winner = alive_players[0]
+            runner_up = next((p for p in self._player_ids() if p != winner), 0)
+            return winner, runner_up
 
-        if MissionManager.check_completion(self.p1_mission, self.board, 1):
-            return 1, 2
-        if MissionManager.check_completion(self.p2_mission, self.board, 2):
-            return 2, 1
+        for p_id in alive_players:
+            mission = self.player_missions.get(p_id)
+            if mission and MissionManager.check_completion(mission, self.board, p_id):
+                runner_up = next((p for p in alive_players if p != p_id), 0)
+                return p_id, runner_up
 
         if self.current_turn >= Config.GAME['MAX_TURNS']:
             return -1, -1
