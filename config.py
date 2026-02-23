@@ -1,21 +1,15 @@
 from typing import Dict, Any
 
 class Config:
-    
-    # =========================================
-    # ⚙️ UTILS & DEBUG
-    # =========================================
-    DEBUG: Dict[str, Any] = {
-        "LONG_SESSION": True
-    }
-
     # =========================================
     # 🌍 GAME SETTINGS (Il Mondo Fisico)
     # =========================================
     GAME: Dict[str, Any] = {
-        "NUM_PLAYERS": 4,
-        "NUM_TERRITORIES": 25,
-        "MAX_TURNS": 100,
+        "NUM_TERRITORIES": 42,
+        "MAX_TURNS": 250,
+        "NUM_PLAYERS": 8,
+        "INITIAL_PLACEMENT_ARMIES_PER_TERRITORY": 1.5,
+        "INITIAL_PLACEMENT_STEP_DIVISOR": 4,
         "MAX_ARMIES_PER_TERRITORY": 30,
         "MAX_TOTAL_ARMIES": 100,
         "STARTING_ARMIES": 1,
@@ -23,20 +17,19 @@ class Config:
         "MIN_BONUS": 1,
         "MIN_REINFORCE_QTY": 0.05,
         "MIN_POST_CONQUEST_MOVE": 2,
-        "INITIAL_PLACEMENT_TOTAL": 12,
-        "INITIAL_PLACEMENT_STEP": 3,
         "PHASES": ["INITIAL_PLACEMENT", "REINFORCE", "ATTACK", "POST_ATTACK_MOVE", "MANEUVER"]
     }
 
     # =========================================
-    # 🗺️ CONTINENTS (5x5 grid, 25 territories)
+    # 🗺️ CONTINENTS
     # =========================================
-    CONTINENTS: Dict[str, Dict[str, Any]] = {
-        "NORTH_WEST": {"t_ids": [0, 1, 5, 6, 10, 11], "bonus": 3},
-        "NORTH_EAST": {"t_ids": [3, 4, 8, 9, 13, 14], "bonus": 3},
-        "SOUTH_WEST": {"t_ids": [10, 11, 15, 16, 20, 21], "bonus": 3},
-        "SOUTH_EAST": {"t_ids": [13, 14, 18, 19, 23, 24], "bonus": 3},
-        "CENTER":     {"t_ids": [7, 12, 17], "bonus": 2}
+    CONTINENTS = {
+        "NORTH_AMERICA": {"t_ids": list(range(0, 9)), "bonus": 5},
+        "SOUTH_AMERICA": {"t_ids": list(range(9, 13)), "bonus": 2},
+        "EUROPE": {"t_ids": list(range(13, 20)), "bonus": 5},
+        "AFRICA": {"t_ids": list(range(20, 26)), "bonus": 3},
+        "ASIA": {"t_ids": list(range(26, 38)), "bonus": 7},
+        "OCEANIA": {"t_ids": list(range(38, 42)), "bonus": 2},
     }
 
     # =========================================
@@ -48,11 +41,15 @@ class Config:
         "DOMINATION_80": {"type": "territory_count", "target": 0.80},
         "TOTAL_CONTROL": {"type": "territory_count", "target": 1.00},
 
-        # --- EMPIRE  ---
-        "EMPIRE_NW_SE": {"type": "continents", "target": ["NORTH_WEST", "SOUTH_EAST"]},
-        "EMPIRE_NE_SW": {"type": "continents", "target": ["NORTH_EAST", "SOUTH_WEST"]},
-        "TRIAD": {"type": "continents", "target": ["NORTH_WEST", "NORTH_EAST", "CENTER"]},
-        "MAP_CONTROL": {"type": "continents", "target": ["NORTH_WEST", "NORTH_EAST", "SOUTH_WEST", "SOUTH_EAST"]}
+        # --- EMPIRE (Realistiche stile Risiko) ---
+        "CONTROL_NA_AU": { "type": "continents", "target": ["NORTH_AMERICA", "OCEANIA"]},
+        "CONTROL_EU_SA": { "type": "continents","target": ["EUROPE", "SOUTH_AMERICA"]},
+        "CONTROL_AS_SA": { "type": "continents", "target": ["ASIA", "SOUTH_AMERICA"]},
+        "CONTROL_EU_AU": { "type": "continents", "target": ["EUROPE", "OCEANIA"]},
+        "CONTROL_NA_AF": { "type": "continents","target": ["NORTH_AMERICA", "AFRICA"]},
+        "CONTROL_AS_AF": { "type": "continents","target": ["ASIA", "AFRICA"]},
+        "CONTROL_3_ANY": { "type": "continent_count","target": 3},
+        "CONTROL_4_ANY": { "type": "continent_count", "target": 4}
     }
 
     # =========================================
@@ -63,10 +60,11 @@ class Config:
         # L'input sarà: (Num Territori * 3) -> Stato, Armate, Minaccia
         # L'output sarà: [Azione, Sorgente, Destinazione, Quantità]
         "OUTPUT_SIZE": 4,
-        "EPSILON-GREEDY": 0.05,
-        "ATTACK_DECISION_THRESHOLD": 0.45,
+        "EPSILON-GREEDY": 0.12,
+        "ATTACK_DECISION_THRESHOLD": 0.2,
         "MANEUVER_DECISION_THRESHOLD": 0.45,
-        "ATTACK_MIN_RATIO": 1.15
+        "ATTACK_MIN_RATIO": 1.1,
+        "ATTACK_FORCE_MIN_RATIO": 1.35,
     }
 
     # =========================================
@@ -95,7 +93,7 @@ class Config:
     # 👤 HUMAN DATASET (Imitation Learning)
     # =========================================
     HUMAN_DATA: Dict[str, Any] = {
-        "ENABLED": True,
+        "ENABLED": False,
         "DATASET_PATH": "dataset/human_dataset.jsonl",
         "MIN_SAMPLES": 100,
         "SAMPLE_SIZE": 512,
@@ -104,7 +102,7 @@ class Config:
 
     # =========================================
     # 💎 REWARDS (La Motivazione)
-    # =================================s========
+    # =========================================
     REWARD: Dict[str, int] = {
         # --- ESITI PARTITA ---
         "WIN": 6000,
@@ -119,16 +117,21 @@ class Config:
         "REINFORCE_STACK_THRESHOLD": 12,
         "REINFORCE_REPEAT_PENALTY": -30,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 180,
+        "CONQUER_TERRITORY": 120,
         "LOSE_TERRITORY": -300,
-        "KILL_ENEMY_ARMY": 45,
+        "KILL_ENEMY_ARMY": 25,
         "LOSE_ARMY": -8,
-        "ATTACK_RISK_PENALTY": -450,
-        "AVOID_RISK_BONUS": 15,
-        "LEAVE_ONE_ARMY_PENALTY": -850,
+        "ATTACK_RISK_PENALTY": -140,
+        "AVOID_RISK_BONUS": 35,
+        "LEAVE_ONE_ARMY_PENALTY": -280,
+        "POST_ATTACK_RISK_PENALTY": -240,
+        "POST_ATTACK_LEAVE_ONE_PENALTY": -360,
         "CONQUEST_STREAK_CAP": 3,
+        "PASS_ATTACK_PENALTY": -40,
         "PASS_REPEAT_PENALTY": -10,
         "PASS_PENALTY_CAP": -300,
+        "PASS_ATTACK_MIN_ADVANTAGE": 2,
+        "ATTACK_FORCE_MIN_ADVANTAGE": 3,
         "ARMY_LIMIT_PENALTY": -80,
         # --- DIFESA / PRESIDIO ---
         "DEFEND_BONUS": 25,
@@ -138,7 +141,7 @@ class Config:
         "VALID_SAFE_ACTION_BONUS": 8,
         # --- MANOVRA ---
         "MANEUVER_CORRECTLY": 10,
-        "MANEUVER_PENALTY": -40,
+        "MANEUVER_PENALTY": -80,
         "MANEUVER_STRATEGIC": 60,
         # --- CONTINENTI / CONTROLLO MAPPA ---
         "HOLD_CONTINENT": 70,
@@ -151,6 +154,5 @@ class Config:
         "INVALID_MOVE": -100,
         "INVALID_MOVE_ATTACK": -200,
         "CONSECUTIVE_INVALID_MOVE": -500,
-        "GAME_LENGTH_PENALTY": -2,
+        "GAME_LENGTH_PENALTY": -10,
     }
-

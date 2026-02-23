@@ -68,12 +68,12 @@ async def play_ai_turn(
         reward, done, info = env.step(action, player_id)
 
         player_scores[player_id] = int(player_scores.get(player_id, 0) + reward)
-        if "opponent_reward" in info:
-            defender_id = info.get("defender_id")
-            if isinstance(defender_id, int) and defender_id != player_id:
-                player_scores[defender_id] = int(
-                    player_scores.get(defender_id, 0) + int(info["opponent_reward"])
-                )
+        opponent_reward = int(info.get("opponent_reward", 0))
+        defender_id = info.get("defender_id")
+        if opponent_reward and isinstance(defender_id, int) and defender_id != player_id:
+            player_scores[defender_id] = int(
+                player_scores.get(defender_id, 0) + opponent_reward
+            )
 
         reason = WatchMatchUtils.get_reward_reason(action["type"], reward, info)
         log_entry = WatchMatchUtils.format_log_line(player_id, action, reward, reason)
@@ -114,12 +114,12 @@ async def play_ai_turn(
             post_action["type"] = "POST_ATTACK_MOVE"
             reward2, done2, info2 = env.step(post_action, player_id)
             player_scores[player_id] = int(player_scores.get(player_id, 0) + reward2)
-            if "opponent_reward" in info2:
-                defender_id = info2.get("defender_id")
-                if isinstance(defender_id, int) and defender_id != player_id:
-                    player_scores[defender_id] = int(
-                        player_scores.get(defender_id, 0) + int(info2["opponent_reward"])
-                    )
+            opponent_reward2 = int(info2.get("opponent_reward", 0))
+            defender_id = info2.get("defender_id")
+            if opponent_reward2 and isinstance(defender_id, int) and defender_id != player_id:
+                player_scores[defender_id] = int(
+                    player_scores.get(defender_id, 0) + opponent_reward2
+                )
             reason2 = WatchMatchUtils.get_reward_reason(post_action["type"], reward2, info2)
             log2 = WatchMatchUtils.format_log_line(player_id, post_action, reward2, reason2)
             action_log.append(log2)

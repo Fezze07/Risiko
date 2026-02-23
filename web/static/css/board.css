@@ -78,10 +78,34 @@
     box-shadow: 0 0 10px var(--primary-glow);
 }
 
+/* ---- Continent Hulls ---- */
+.continent-hull {
+    stroke-width: 1;
+    stroke-dasharray: 4, 4;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.continent-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+/* ---- Connection Lines ---- */
 .connection-line {
     stroke: rgba(255, 255, 255, 0.1);
     stroke-width: 1.5;
     transition: all 0.3s;
+}
+
+.connection-line.wraparound {
+    stroke-dasharray: 4, 4;
+    stroke: rgba(255, 255, 255, 0.15);
 }
 
 .connection-line.highlight {
@@ -91,9 +115,11 @@
     filter: drop-shadow(0 0 5px var(--accent-green));
 }
 
+/* ---- Territory Groups ---- */
 .territory-group {
     transition: all 0.2s;
     transform-origin: center;
+    cursor: pointer;
 }
 
 .territory-group.pulse-reinforce {
@@ -109,84 +135,62 @@
 }
 
 .territory-group.selected {
-    transform: scale(1.05);
+    transform: scale(1.15);
 }
 
-.territory-cell {
-    fill: rgba(255, 255, 255, 0.05);
-    stroke: rgba(255, 255, 255, 0.2);
-    stroke-width: 1;
-    transition: all 0.2s;
+/* ---- Territory Circles ---- */
+.territory-circle {
+    stroke-width: 2;
+    transition: fill 0.3s, stroke 0.3s, filter 0.2s, fill-opacity 0.3s;
 }
 
-.territory-cell:hover {
-    stroke: #fff;
-    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
-}
-
-.territory-cell.owner-1 {
-    fill: rgba(37, 140, 244, 0.2);
-    stroke: var(--primary-blue);
-}
-
-.territory-cell.owner-2 {
-    fill: rgba(255, 42, 109, 0.2);
-    stroke: var(--accent-red);
-}
-
-.territory-cell.selected-src {
+.territory-circle:hover {
     stroke: #fff;
     stroke-width: 3;
-    filter: drop-shadow(0 0 10px var(--primary-blue));
+    filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
 }
 
-.territory-cell.selected-dest {
-    stroke: #fff;
+.territory-circle.selected-src {
+    stroke: #fff !important;
     stroke-width: 3;
-    stroke-dasharray: 5, 5;
+    filter: drop-shadow(0 0 12px var(--primary-blue)) drop-shadow(0 0 20px var(--primary-blue));
 }
 
-.territory-cell.flash-reinforce {
-    animation: flash-reinforce 0.9s ease-in-out;
+.territory-circle.selected-dest {
+    stroke: #fff !important;
+    stroke-width: 3;
+    stroke-dasharray: 5, 4;
+    filter: drop-shadow(0 0 10px var(--accent-red));
 }
 
-.territory-cell.flash-move {
-    animation: flash-move 0.9s ease-in-out;
+.territory-circle.flash-reinforce {
+    animation: flash-circle-reinforce 0.9s ease-in-out;
 }
 
-.territory-cell.flash-post {
-    animation: flash-post 0.9s ease-in-out;
+.territory-circle.flash-move {
+    animation: flash-circle-move 0.9s ease-in-out;
 }
 
-.territory-group.flash-reinforce .territory-cell {
-    animation: flash-reinforce 0.9s ease-in-out;
+.territory-circle.flash-post {
+    animation: flash-circle-post 0.9s ease-in-out;
 }
 
-.territory-group.flash-move .territory-cell {
-    animation: flash-move 0.9s ease-in-out;
-}
-
-.territory-group.flash-post .territory-cell {
-    animation: flash-post 0.9s ease-in-out;
-}
-
-.territory-group.flash-reinforce {
-    animation: pulse-reinforce 0.9s ease-in-out;
-}
-
-.territory-group.flash-move {
-    animation: pulse-move 0.9s ease-in-out;
-}
-
-.territory-group.flash-post {
-    animation: pulse-post 0.9s ease-in-out;
-}
-
-.territory-text {
+/* ---- Territory Text ---- */
+.territory-armies {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    fill: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    font-weight: 700;
+    fill: #fff;
     pointer-events: none;
+    text-shadow: 0 0 4px rgba(0,0,0,0.8);
+}
+
+.territory-name {
+    font-family: 'Inter', sans-serif;
+    font-size: 7px;
+    fill: rgba(255, 255, 255, 0.65);
+    pointer-events: none;
+    letter-spacing: 0.3px;
 }
 
 .territory-id {
@@ -196,56 +200,50 @@
     pointer-events: none;
 }
 
-.territory-armies {
-    font-size: 14px;
-    font-weight: 700;
-    fill: #fff;
-    pointer-events: none;
-}
-
 .territory-owner-icon {
     font-family: 'JetBrains Mono', monospace;
     pointer-events: none;
 }
 
-@keyframes flash-reinforce {
-    0% { stroke: rgba(74, 222, 128, 0.2); stroke-width: 1; filter: drop-shadow(0 0 0 rgba(74, 222, 128, 0)); }
-    30% { stroke: rgba(74, 222, 128, 1); stroke-width: 4; filter: drop-shadow(0 0 14px rgba(74, 222, 128, 0.9)); }
-    60% { stroke: rgba(74, 222, 128, 0.8); stroke-width: 2; filter: drop-shadow(0 0 6px rgba(74, 222, 128, 0.6)); }
-    100% { stroke: rgba(74, 222, 128, 0.2); stroke-width: 1; filter: drop-shadow(0 0 0 rgba(74, 222, 128, 0)); }
+/* ---- Keyframes ---- */
+@keyframes flash-circle-reinforce {
+    0%   { stroke: rgba(74, 222, 128, 0.2); stroke-width: 2; filter: drop-shadow(0 0 0 rgba(74, 222, 128, 0)); }
+    30%  { stroke: rgba(74, 222, 128, 1);   stroke-width: 5; filter: drop-shadow(0 0 16px rgba(74, 222, 128, 0.9)); }
+    60%  { stroke: rgba(74, 222, 128, 0.8); stroke-width: 3; filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.6)); }
+    100% { stroke: rgba(74, 222, 128, 0.2); stroke-width: 2; filter: drop-shadow(0 0 0 rgba(74, 222, 128, 0)); }
 }
 
-@keyframes flash-move {
-    0% { stroke: rgba(56, 189, 248, 0.2); stroke-width: 1; filter: drop-shadow(0 0 0 rgba(56, 189, 248, 0)); }
-    30% { stroke: rgba(56, 189, 248, 1); stroke-width: 4; filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.9)); }
-    60% { stroke: rgba(56, 189, 248, 0.8); stroke-width: 2; filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.6)); }
-    100% { stroke: rgba(56, 189, 248, 0.2); stroke-width: 1; filter: drop-shadow(0 0 0 rgba(56, 189, 248, 0)); }
+@keyframes flash-circle-move {
+    0%   { stroke: rgba(56, 189, 248, 0.2); stroke-width: 2; filter: drop-shadow(0 0 0 rgba(56, 189, 248, 0)); }
+    30%  { stroke: rgba(56, 189, 248, 1);   stroke-width: 5; filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.9)); }
+    60%  { stroke: rgba(56, 189, 248, 0.8); stroke-width: 3; filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.6)); }
+    100% { stroke: rgba(56, 189, 248, 0.2); stroke-width: 2; filter: drop-shadow(0 0 0 rgba(56, 189, 248, 0)); }
 }
 
-@keyframes flash-post {
-    0% { stroke: rgba(251, 191, 36, 0.2); stroke-width: 1; filter: drop-shadow(0 0 0 rgba(251, 191, 36, 0)); }
-    30% { stroke: rgba(251, 191, 36, 1); stroke-width: 4; filter: drop-shadow(0 0 14px rgba(251, 191, 36, 0.9)); }
-    60% { stroke: rgba(251, 191, 36, 0.8); stroke-width: 2; filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.6)); }
-    100% { stroke: rgba(251, 191, 36, 0.2); stroke-width: 1; filter: drop-shadow(0 0 0 rgba(251, 191, 36, 0)); }
+@keyframes flash-circle-post {
+    0%   { stroke: rgba(251, 191, 36, 0.2); stroke-width: 2; filter: drop-shadow(0 0 0 rgba(251, 191, 36, 0)); }
+    30%  { stroke: rgba(251, 191, 36, 1);   stroke-width: 5; filter: drop-shadow(0 0 16px rgba(251, 191, 36, 0.9)); }
+    60%  { stroke: rgba(251, 191, 36, 0.8); stroke-width: 3; filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.6)); }
+    100% { stroke: rgba(251, 191, 36, 0.2); stroke-width: 2; filter: drop-shadow(0 0 0 rgba(251, 191, 36, 0)); }
 }
 
 @keyframes pulse-reinforce {
-    0% { transform: scale(1); }
-    35% { transform: scale(1.12); }
-    70% { transform: scale(1.05); }
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.18); }
+    70%  { transform: scale(1.08); }
     100% { transform: scale(1); }
 }
 
 @keyframes pulse-move {
-    0% { transform: scale(1); }
-    35% { transform: scale(1.12); }
-    70% { transform: scale(1.05); }
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.18); }
+    70%  { transform: scale(1.08); }
     100% { transform: scale(1); }
 }
 
 @keyframes pulse-post {
-    0% { transform: scale(1); }
-    35% { transform: scale(1.12); }
-    70% { transform: scale(1.05); }
+    0%   { transform: scale(1); }
+    35%  { transform: scale(1.18); }
+    70%  { transform: scale(1.08); }
     100% { transform: scale(1); }
 }

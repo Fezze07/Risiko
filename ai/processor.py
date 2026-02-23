@@ -7,12 +7,25 @@ from config import Config
 
 class Processor:
     FEATURES_PER_TERRITORY = 4
+    GLOBAL_FEATURES = 4
 
     def __init__(self, board: Board):
         self.num_territories: int = board.n
         self.features_per_territory: int = self.FEATURES_PER_TERRITORY
-        # Input fisso: 4 feature per territorio.
-        self.input_size: int = self.num_territories * self.features_per_territory
+        self.num_global_features: int = self.GLOBAL_FEATURES
+        # Input size: (territories * 4) + global
+        self.input_size: int = (self.num_territories * self.features_per_territory) + self.num_global_features
+
+    @staticmethod
+    def _normalize_phase(phase: str) -> float:
+        phases = {
+            "INITIAL_PLACEMENT": 0.0,
+            "REINFORCE": 0.25,
+            "ATTACK": 0.5,
+            "POST_ATTACK_MOVE": 0.75,
+            "MANEUVER": 1.0
+        }
+        return phases.get(phase, 0.0)
 
     @staticmethod
     def _normalize_enemy_relative(relative_enemy_id: int, total_players: int) -> float:
@@ -20,7 +33,7 @@ class Processor:
             return 0.0
         if total_players <= 2:
             return 1.0
-        denominator = total_players - 2
+        denominator = total_players - 1 # Adjusted denominator
         if denominator <= 0:
             return 1.0
         normalized = 0.1 + ((relative_enemy_id - 1) / denominator) * 0.9
@@ -43,25 +56,23 @@ class Processor:
         current_phase: str = "",
         mission_data: Optional[Dict[str, Any]] = None,
     ) -> np.ndarray:
-        # Parametri mantenuti per compatibilita' con i call-site esistenti.
-        _ = current_turn, current_phase, mission_data
-
         state_vector = np.zeros(self.input_size, dtype=np.float32)
         max_armies = max(1, int(Config.GAME["MAX_ARMIES_PER_TERRITORY"]))
         total_players = self._resolve_total_players(board, current_player_id)
 
+        # 1) Territory Features
         for territory_id in range(self.num_territories):
             territory = board.territories[territory_id]
             base = territory_id * self.features_per_territory
             owner_id = territory.owner_id
 
-            # 1) is_mine
+            # is_mine
             state_vector[base] = 1.0 if owner_id == current_player_id else 0.0
 
-            # 2) army_count_normalized
+            # army_count_normalized
             state_vector[base + 1] = min(1.0, territory.armies / max_armies)
 
-            # 3) enemy_id_relative (0 se territorio mio o owner non valido)
+            # enemy_id_relative
             enemy_relative = 0.0
             if owner_id is not None and owner_id != current_player_id:
                 relative_id = (owner_id - current_player_id) % total_players
@@ -70,7 +81,7 @@ class Processor:
                 enemy_relative = self._normalize_enemy_relative(relative_id, total_players)
             state_vector[base + 2] = enemy_relative
 
-            # 4) threat_level: somma armate nemiche confinanti normalizzata.
+            # threat_level
             enemy_neighbor_armies = sum(
                 board.territories[n_id].armies
                 for n_id in territory.neighbors
@@ -78,6 +89,22 @@ class Processor:
             )
             max_threat = max_armies * max(1, len(territory.neighbors))
             state_vector[base + 3] = min(1.0, enemy_neighbor_armies / max_threat)
+
+        # 2) Global Features
+        global_base = self.num_territories * self.features_per_territory
+        
+        # Num Players (normalized 0-1 for 2-8 range)
+        state_vector[global_base] = min(1.0, total_players / 8.0)
+        
+        # Turn progress
+        max_turns = Config.GAME.get("MAX_TURNS", 100)
+        state_vector[global_base + 1] = min(1.0, current_turn / max_turns)
+        
+        # Phase (normalized)
+        state_vector[global_base + 2] = self._normalize_phase(current_phase)
+        
+        # Player ID (normalized)
+        state_vector[global_base + 3] = current_player_id / 8.0
 
         return state_vector
 
@@ -132,32 +159,70 @@ class Processor:
 
         elif current_phase == "ATTACK":
             attack_threshold = Config.NN.get("ATTACK_DECISION_THRESHOLD", 0.4)
-            if raw_decision > attack_threshold:
-                # Filtriamo i territori da cui può partire un attacco (miei e con truppe > 1)
-                valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
+            valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
+            min_ratio = float(Config.NN.get("ATTACK_MIN_RATIO", 1.0))
+            min_adv = int(Config.REWARD.get("PASS_ATTACK_MIN_ADVANTAGE", 0))
+            force_min_ratio = float(Config.NN.get("ATTACK_FORCE_MIN_RATIO", max(min_ratio, 1.25)))
+            force_min_adv = int(Config.REWARD.get("ATTACK_FORCE_MIN_ADVANTAGE", max(min_adv, 2)))
 
-                if valid_sources:
-                    # Scegliamo la sorgente tra quelle valide
-                    idx_s = int(raw_src * len(valid_sources))
-                    src_id = valid_sources[min(idx_s, len(valid_sources) - 1)]
+            candidates = []
+            force_candidates = []
+            for src_id in valid_sources:
+                enemies = [
+                    n for n in board.territories[src_id].neighbors
+                    if board.territories[n].owner_id != player_id
+                ]
+                if not enemies:
+                    continue
+                attacker_armies = board.territories[src_id].armies
+                for dest_id in enemies:
+                    defender_armies = board.territories[dest_id].armies
+                    ratio = attacker_armies / max(1, defender_armies)
+                    advantage = attacker_armies - defender_armies
 
-                    # Filtriamo i vicini nemici della sorgente scelta
-                    enemies = [n for n in board.territories[src_id].neighbors if board.territories[n].owner_id != player_id]
-                    if enemies:
-                        # Scegliamo il bersaglio tra i nemici confinanti
-                        idx_d = int(raw_dest * len(enemies))
-                        dest_id = enemies[min(idx_d, len(enemies) - 1)]
-                        attacker_armies = board.territories[src_id].armies
-                        defender_armies = board.territories[dest_id].armies
-                        min_ratio = Config.NN.get("ATTACK_MIN_RATIO", 1.0)
-                        if attacker_armies / max(1, defender_armies) < min_ratio:
-                            return {"type": "PASS", "src": 0, "dest": 0, "qty": 0}
-                        action = {
-                            "type": "ATTACK",
-                            "src": src_id,
-                            "dest": dest_id,
-                            "qty": qty_percent
-                        }
+                    if ratio < min_ratio:
+                        continue
+                    if advantage <= min_adv:
+                        continue
+                    # Valuta anche la pressione nemica residua sul territorio sorgente.
+                    src_enemy_pressure = 0
+                    for n in board.territories[src_id].neighbors:
+                        if n == dest_id:
+                            continue
+                        neigh = board.territories[n]
+                        if neigh.owner_id != player_id:
+                            src_enemy_pressure = max(src_enemy_pressure, neigh.armies)
+
+                    score = (2.0 * ratio) + float(advantage) - (0.5 * src_enemy_pressure)
+                    entry = (score, src_id, dest_id, ratio, advantage)
+                    candidates.append(entry)
+                    if (
+                        attacker_armies >= 4
+                        and ratio >= force_min_ratio
+                        and advantage >= force_min_adv
+                    ):
+                        force_candidates.append(entry)
+
+            should_attack = raw_decision > attack_threshold
+            forced_attack = False
+            if not should_attack and force_candidates:
+                should_attack = True
+                forced_attack = True
+
+            if should_attack and candidates:
+                if forced_attack:
+                    best = max(force_candidates, key=lambda c: c[0])
+                    src_id, dest_id = best[1], best[2]
+                else:
+                    idx = int(raw_src * len(candidates))
+                    picked = candidates[min(idx, len(candidates) - 1)]
+                    src_id, dest_id = picked[1], picked[2]
+                action = {
+                    "type": "ATTACK",
+                    "src": src_id,
+                    "dest": dest_id,
+                    "qty": qty_percent,
+                }
 
         elif current_phase == "POST_ATTACK_MOVE":
             action = {
@@ -190,9 +255,3 @@ class Processor:
                         }
 
         return action
-
-
-
-
-
-

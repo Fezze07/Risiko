@@ -47,6 +47,10 @@
             <button id="btn-ctrl-play" class="btn-cyber control-btn">Play</button>
             <button id="btn-ctrl-pause" class="btn-cyber control-btn secondary">Pause</button>
             <button id="btn-ctrl-reset" class="btn-cyber control-btn secondary">Reset Match</button>
+            <div class="control-toggle">
+                <input type="checkbox" id="toggle-autoskip-battle">
+                <label for="toggle-autoskip-battle">Auto-skip combat</label>
+            </div>
             <div class="speed-box">
                 <label for="speed-slider">Game Speed</label>
                 <input id="speed-slider" type="range" min="100" max="2000" step="100" value="2000">
@@ -137,13 +141,6 @@
                     <h3>Leaderboard</h3>
                     <div id="leaderboard-current" class="leaderboard-current">Current: P1</div>
                     <div id="player-legend" class="player-legend"></div>
-                </div>
-
-                <div class="panel-section encoding-panel">
-                    <h3>Encoding Debug</h3>
-                    <div id="encoding-debug" class="encoding-debug">
-                        Hover su un territorio per vedere le feature NN.
-                    </div>
                 </div>
 
                 <section class="log-panel">

@@ -191,6 +191,25 @@
     white-space: pre-line;
 }
 
+.control-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.2);
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.control-toggle input {
+    accent-color: var(--primary-blue);
+}
+
 .score-card {
     display: flex;
     justify-content: space-between;

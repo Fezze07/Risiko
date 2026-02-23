@@ -76,6 +76,17 @@
     z-index: 1000;
 }
 
+.modal-overlay.autoskipped {
+    pointer-events: none;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(2px);
+}
+
+.modal-overlay.autoskipped .modal {
+    transform: scale(0.92);
+    opacity: 0.9;
+}
+
 .modal {
     background: var(--bg-deep);
     border: 1px solid var(--primary-blue);

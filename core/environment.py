@@ -19,6 +19,8 @@ class RisikoEnvironment:
         self.has_reinforced: bool = False
         self.armies_to_place: int = 0
         self.armies_to_place_total: int = 0
+        self.initial_placement_total: int = 0
+        self.initial_placement_step: int = 0
         self.conquest_streak: int = 0
         self.max_armies: int = Config.GAME['MAX_ARMIES_PER_TERRITORY']
         self.setup_placed: Dict[int, int] = {}
@@ -60,14 +62,46 @@ class RisikoEnvironment:
             for t in self.board.territories.values()
         )
 
+    def _compute_initial_placement(self) -> None:
+        num_territories = int(getattr(self.board, "n", 0))
+        total_players = max(2, int(self.num_players))
+        armies_per_territory = float(Config.GAME.get("INITIAL_PLACEMENT_ARMIES_PER_TERRITORY", 1.0))
+        step_divisor = float(Config.GAME.get("INITIAL_PLACEMENT_STEP_DIVISOR", 4.0))
+
+        base = (num_territories / float(total_players)) * armies_per_territory
+        self.initial_placement_total = max(1, int(round(base)))
+        self.initial_placement_step = max(1, int(round(self.initial_placement_total / step_divisor)))
+
+    def _has_easy_attack(self, player_id: int) -> bool:
+        min_ratio = float(Config.NN.get("ATTACK_MIN_RATIO", 1.0))
+        min_adv = int(Config.REWARD.get("PASS_ATTACK_MIN_ADVANTAGE", 0))
+        for t in self.board.territories.values():
+            if t.owner_id != player_id:
+                continue
+            attacker_armies = t.armies
+            if attacker_armies < 3:
+                continue
+            for n in t.neighbors:
+                neigh = self.board.territories[n]
+                if neigh.owner_id == player_id:
+                    continue
+                defender_armies = max(1, neigh.armies)
+                if attacker_armies / defender_armies < min_ratio:
+                    continue
+                if attacker_armies <= defender_armies + min_adv:
+                    continue
+                return True
+        return False
+
     def reset(self) -> Board:
         self.board.reset(self.num_players)
         self.player_turn = 1
         self.current_turn = 0
         self.current_phase = 'INITIAL_PLACEMENT'
         self.has_reinforced = False
-        self.armies_to_place = Config.GAME['INITIAL_PLACEMENT_STEP']
-        self.armies_to_place_total = Config.GAME['INITIAL_PLACEMENT_STEP']
+        self._compute_initial_placement()
+        self.armies_to_place = self.initial_placement_step
+        self.armies_to_place_total = self.initial_placement_step
         self.setup_placed = {p_id: 0 for p_id in self._player_ids()}
         self.player_missions = {}
         for p_id in self._player_ids():
@@ -113,7 +147,7 @@ class RisikoEnvironment:
             # Controllo cambio turno / fase
             if self.armies_to_place <= 0:
                 # Turno finito per questo player nel setup
-                total_needed = Config.GAME['INITIAL_PLACEMENT_TOTAL']
+                total_needed = self.initial_placement_total
                 if all(
                     self.setup_placed.get(p_id, 0) >= total_needed
                     for p_id in self._player_ids()
@@ -128,8 +162,8 @@ class RisikoEnvironment:
                 else:
                     # Passa turno all'avversario
                     self.player_turn = self._next_player_id(self.player_turn)
-                    self.armies_to_place = Config.GAME['INITIAL_PLACEMENT_STEP']
-                    self.armies_to_place_total = Config.GAME['INITIAL_PLACEMENT_STEP']
+                    self.armies_to_place = self.initial_placement_step
+                    self.armies_to_place_total = self.initial_placement_step
                     
             return reward, done, info
 
@@ -154,7 +188,6 @@ class RisikoEnvironment:
                 return reward, False, info
 
         if action['type'] == 'PASS':
-            self.repeat_pass[player_id] += 1
             if self.current_phase == 'REINFORCE':
                 if self.armies_to_place > 0 and self._has_reinforce_space(player_id):
                     return Config.REWARD['INVALID_MOVE'], False, {'error': 'Hai ancora truppe da piazzare (regola Risiko: no PASS in REINFORCE)'}
@@ -162,42 +195,31 @@ class RisikoEnvironment:
                 return 0, False, info
 
             if self.current_phase == 'ATTACK':
+                # Transizione gratuita alla manovra
                 self.current_phase = 'MANEUVER'
                 self.conquest_streak = 0
-                if self.repeat_pass[player_id] > 1:
-                    # Penalità progressiva: -5, -10, -15...
-                    multiplier = self.repeat_pass[player_id] - 1
-                    pass_penalty = Config.REWARD['PASS_REPEAT_PENALTY'] * multiplier
-                    # Cap della penalità
-                    pass_penalty = max(pass_penalty, Config.REWARD.get('PASS_PENALTY_CAP', -100))
-                    
-                    reward += pass_penalty
-                    info['repeat_pass_penalty'] = True
-                    info['pass_count'] = self.repeat_pass[player_id]
+                if self._has_easy_attack(player_id):
+                    reward += Config.REWARD.get('PASS_ATTACK_PENALTY', 0)
+                    if reward:
+                        info['pass_attack_penalty'] = True
                 return reward, False, info
 
             if self.current_phase == 'POST_ATTACK_MOVE':
                 return self._handle_invalid_move('Non puoi passare: devi scegliere quante truppe spostare', info)
 
             if self.current_phase == 'MANEUVER':
+                # Incrementiamo solo qui se decidono di non fare manovre e finire il turno
+                self.repeat_pass[player_id] += 1
                 self._end_turn()
+                reward_p = 0
                 if self.repeat_pass[player_id] > 1:
                     # Penalità progressiva
                     multiplier = self.repeat_pass[player_id] - 1
                     pass_penalty = Config.REWARD['PASS_REPEAT_PENALTY'] * multiplier
-                    # Cap della penalità
                     pass_penalty = max(pass_penalty, Config.REWARD.get('PASS_PENALTY_CAP', -100))
-
-                    reward += pass_penalty
+                    reward_p = pass_penalty
                     info['repeat_pass_penalty'] = True
-                    info['pass_count'] = self.repeat_pass[player_id]
-                return reward, False, info
-
-        if action['type'] != self.current_phase:
-            invalid_reward = self._get_invalid_move_reward()
-            return invalid_reward, False, {
-                'error': f"Mossa {action['type']} non permessa in {self.current_phase}"
-            }
+                return reward_p, False, info
 
         if self.current_phase == 'REINFORCE':
             is_valid, err_msg = ActionValidator.validate_reinforce(
@@ -223,12 +245,18 @@ class RisikoEnvironment:
                 if requested > self.armies_to_place:
                     requested = self.armies_to_place
                 action['qty'] = min(1.0, requested / self.armies_to_place)
+            
             reward, placed, action_extra = self.action_handler.execute_reinforce(
                 self.board,
                 player_id,
                 action,
                 self.armies_to_place,
             )
+            
+            # Reset passività se il piazzamento è avvenuto
+            if placed > 0:
+                self.repeat_pass[player_id] = 0
+                
             info.update(action_extra)
             self.armies_to_place -= placed
             if self.repeat_reinforce[player_id]["count"] > 1:
@@ -237,16 +265,9 @@ class RisikoEnvironment:
                 info['repeat_reinforce_penalty'] = True
                 info['repeat_reinforce_count'] = self.repeat_reinforce[player_id]["count"]
 
-            if self.has_reinforced and not hasattr(self, '_continent_reward_given'):
-                for _, data in Config.CONTINENTS.items():
-                    if all(self.board.territories[t_id].owner_id == player_id for t_id in data['t_ids']):
-                        reward += Config.REWARD['HOLD_CONTINENT']
-                        self._continent_reward_given = True
-                        info['continent_held'] = True
-                        break
-
             if self.armies_to_place <= 0:
                 self.current_phase = 'ATTACK'
+            return reward, False, info
 
         elif self.current_phase == 'ATTACK':
             # Reset pass solo se l'attacco è valido (ma non necessariamente vincente)
@@ -517,3 +538,4 @@ class RisikoEnvironment:
         if self.current_turn >= Config.GAME['MAX_TURNS']:
             return -1, -1
         return 0, 0
+

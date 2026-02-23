@@ -103,6 +103,12 @@ if (DOM.speedSlider) {
         setSpeed(value);
     });
 }
+if (DOM.toggleAutoSkipBattle) {
+    DOM.toggleAutoSkipBattle.checked = gameState.autoSkipBattle;
+    DOM.toggleAutoSkipBattle.addEventListener("change", (e) => {
+        gameState.autoSkipBattle = !!e.target.checked;
+    });
+}
 
 if (DOM.btnSend) DOM.btnSend.addEventListener("click", sendAction);
 if (DOM.btnPass) DOM.btnPass.addEventListener("click", () => sendPass());
@@ -134,7 +140,7 @@ if (DOM.btnZoomReset) {
 }
 
 DOM.boardSvg.addEventListener("mousedown", (e) => {
-    if (e.target.classList.contains("territory-cell") || e.target.closest(".territory-group")) {
+    if (e.target.classList.contains("territory-circle") || e.target.closest(".territory-group")) {
         return;
     }
     gameState.isPanning = true;

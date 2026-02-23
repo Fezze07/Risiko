@@ -83,7 +83,6 @@ class ActionHandler:
         player_id: int,
         action: Dict[str, Any],
     ) -> Tuple[int, bool, int, Dict[str, Any]]:
-        # Esegue solo il combattimento. Lo spostamento post-conquista e' separato.
         t_att = board.territories[action['src']]
         t_def = board.territories[action['dest']]
         defender_id = t_def.owner_id
@@ -125,32 +124,26 @@ class ActionHandler:
             reward += Config.REWARD['AVOID_RISK_BONUS']
             extra_info['avoid_risk'] = True
 
-        # Penalizza attacchi in svantaggio numerico diretto
         if t_att.armies <= t_def.armies and not extra_info.get('risky_attack'):
             reward += Config.REWARD['ATTACK_RISK_PENALTY']
             extra_info['risky_attack'] = True
             extra_info['risky_attack_odds'] = True
-
         if t_def.armies <= 0:
             conquered = True
             t_def.owner_id = player_id
-            t_def.armies = 0  # Verranno mosse dopo
+            t_def.armies = 0
             
-            # Check se il continente è ora completo
-            continent_complete = False
             for c_name, data in Config.CONTINENTS.items():
                 if t_def.id in data['t_ids']:
                     if all(board.territories[tid].owner_id == player_id for tid in data['t_ids']):
-                        continent_complete = True
                         extra_info['continent_complete'] = True
             
-            # Check se l'avversario ha perso un continente
             for c_name, data in Config.CONTINENTS.items():
                 if t_def.id in data['t_ids']:
-                    # Se prima l'avversario aveva tutto e ora abbiamo questo pezzo...
-                    # (In realtà il check è più semplice: abbiamo appena conquistato, 
-                    # quindi lui NON ha più il continente)
-                    pass 
+                    pass
+        else:
+            opponent_reward += Config.REWARD.get('DEFEND_HOLD_TERRITORY', 0)
+            extra_info['defend_hold'] = True
 
         if t_att.armies == 1 and self._has_enemy_neighbors(board, player_id, t_att.id):
             reward += Config.REWARD['LEAVE_ONE_ARMY_PENALTY']
@@ -178,7 +171,7 @@ class ActionHandler:
         amount = min_move + int((movable - min_move) * amount_ratio)
         
         reward = 0
-        extra_info = {'post_attack_move_qty': amount}
+        extra_info: Dict[str, Any] = {}
         
         # Se spostando tutto lasciamo solo 1 armata in un territorio che è ancora sul fronte,
         # e avevamo truppe a sufficienza, forziamo il mantenimento di un presidio (es. 2-3 armate).
@@ -192,6 +185,7 @@ class ActionHandler:
                 extra_info['heuristic_safe_move'] = True
         
         amount = max(min_move, min(amount, movable))
+        extra_info['post_attack_move_qty'] = amount
         
         t_src.armies -= amount
         t_dest.armies += amount
@@ -201,18 +195,18 @@ class ActionHandler:
         if enemies:
             max_threat = max((board.territories[n].armies for n in enemies), default=0)
             if max_threat >= t_dest.armies:
-                reward += Config.REWARD['ATTACK_RISK_PENALTY']
+                reward += Config.REWARD.get('POST_ATTACK_RISK_PENALTY', Config.REWARD['ATTACK_RISK_PENALTY'])
                 extra_info['risky_attack_conquer'] = True
         else:
             reward += Config.REWARD['AVOID_RISK_BONUS']
             extra_info['avoid_risk'] = True
 
         if t_src.armies == 1 and self._has_enemy_neighbors(board, player_id, t_src.id):
-            reward += Config.REWARD['LEAVE_ONE_ARMY_PENALTY']
+            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', Config.REWARD['LEAVE_ONE_ARMY_PENALTY'])
             extra_info['left_one_army_src'] = True
             
         if t_dest.armies == 1 and enemies:
-            reward += Config.REWARD['LEAVE_ONE_ARMY_PENALTY']
+            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', Config.REWARD['LEAVE_ONE_ARMY_PENALTY'])
             extra_info['left_one_army_dest'] = True
 
         return reward, extra_info
@@ -287,6 +281,4 @@ class ActionHandler:
         if armies > 3:
             return 3
         return armies - 1
-
-
 

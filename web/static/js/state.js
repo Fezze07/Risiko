@@ -28,5 +28,7 @@ export const gameState = {
     currentQty: 1,
     maxQty: 1,
     isBattleModalOpen: false,
-    pauseForModal: false
+    pauseForModal: false,
+    autoSkipBattle: false,
+    autoSkipTimer: null
 };

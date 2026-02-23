@@ -305,18 +305,15 @@ async def ws_game_handler(
 
         player_scores[player_id] = int(player_scores.get(player_id, 0) + reward)
 
-        opp_reward = int(info.get("opponent_reward", 0)) if info.get("opponent_reward") else 0
-        if opp_reward:
-            defender_id = info.get("defender_id")
-            if (
-                isinstance(defender_id, int)
-                and defender_id in player_scores
-                and defender_id != player_id
-            ):
-                player_scores[defender_id] = int(player_scores[defender_id] + opp_reward)
-            elif num_players == 2:
-                other = 1 if player_id == 2 else 2
-                player_scores[other] = int(player_scores.get(other, 0) + opp_reward)
+        opp_reward = int(info.get("opponent_reward", 0))
+        defender_id = info.get("defender_id")
+        if (
+            opp_reward
+            and isinstance(defender_id, int)
+            and defender_id in player_scores
+            and defender_id != player_id
+        ):
+            player_scores[defender_id] = int(player_scores[defender_id] + opp_reward)
 
         reason = WatchMatchUtils.get_reward_reason(action["type"], reward, info)
         log_entry = WatchMatchUtils.format_log_line(player_id, action, reward, reason)

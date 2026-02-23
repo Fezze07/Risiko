@@ -156,10 +156,8 @@ class EvolutionManager:
         if not isinstance(best_weights, np.ndarray):
             print(f"[Evolution] Pesi in {filename} non validi, skip caricamento.")
             return False
-        if not self._weights_compatible(best_weights):
-            print(f"[Evolution] Pesi in {filename} incompatibili con la rete attuale, skip caricamento.")
-            return False
 
+        # NeuralNetwork.set_weights gestisca l'auto-resize
         for agent in self.population:
             dna = self._mutate(copy.deepcopy(best_weights))
             agent.nn.set_weights(dna)

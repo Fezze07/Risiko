@@ -21,32 +21,30 @@ def _init_phase_stats() -> Dict[str, int]:
     return stats
 
 
-def run_parallel_match(data: Tuple[Any, Any]) -> Tuple[int, int, Dict[str, int]]:
-    agent_p1, agent_p2 = data
+def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, int], Dict[str, int]]:
+    agents_list = data
     env = RisikoEnvironment()
     env.reset()
+    num_players = env.num_players
 
-    fit1: int = 0
-    fit2: int = 0
-    consecutive_errors: int = 0
-    last_player: Any = None
-
+    # Fitness per ogni giocatore
+    fitness_map: Dict[int, int] = {p_id: 0 for p_id in range(1, num_players + 1)}
+    consecutive_errors: Dict[int, int] = {p_id: 0 for p_id in range(1, num_players + 1)}
+    
     stats: Dict[str, int] = {
         'post_move_count': 0,
-        'post_move_qty_sum': 0,
         'post_move_risky': 0,
     }
     stats.update(_init_phase_stats())
 
     for _ in range(Config.GAME['MAX_TURNS']):
         curr_p = env.player_turn
-        if curr_p != last_player:
-            consecutive_errors = 0
-            last_player = curr_p
-
         phase = env.current_phase
-        agent = agent_p1 if curr_p == 1 else agent_p2
-        mission = env.p1_mission if curr_p == 1 else env.p2_mission
+        
+        # Seleziona l'agente corrispondente allo slot del giocatore
+        agent_idx = (curr_p - 1) % len(agents_list)
+        agent = agents_list[agent_idx]
+        mission = env.get_player_mission(curr_p)
 
         action = agent.think(env.board, curr_p, env.current_turn, phase, mission)
         reward, done, info = env.step(action, curr_p)
@@ -62,34 +60,30 @@ def run_parallel_match(data: Tuple[Any, Any]) -> Tuple[int, int, Dict[str, int]]
 
         if action.get('type') == 'POST_ATTACK_MOVE' and 'post_attack_move_qty' in info:
             stats['post_move_count'] += 1
-            stats['post_move_qty_sum'] += int(info.get('post_attack_move_qty', 0))
             if info.get('risky_attack_conquer') or info.get('left_one_army_src') or info.get('left_one_army_dest'):
                 stats['post_move_risky'] += 1
 
         if 'error' in info:
-            consecutive_errors += 1
+            consecutive_errors[curr_p] += 1
         else:
-            consecutive_errors = 0
+            consecutive_errors[curr_p] = 0
 
-        if consecutive_errors >= 10:
-            if curr_p == 1:
-                fit1 += Config.REWARD['CONSECUTIVE_INVALID_MOVE']
-            else:
-                fit2 += Config.REWARD['CONSECUTIVE_INVALID_MOVE']
+        if consecutive_errors[curr_p] >= 10:
+            fitness_map[curr_p] += Config.REWARD['CONSECUTIVE_INVALID_MOVE']
+            # Opzionale: potremmo chiudere il match se un player è bloccato
             break
 
-        if curr_p == 1:
-            fit1 += reward
-        else:
-            fit2 += reward
+        fitness_map[curr_p] += reward
 
+        # Gestione reward avversario
         opponent_reward = info.get('opponent_reward', 0)
-        if opponent_reward:
-            if curr_p == 1:
-                fit2 += opponent_reward
-            else:
-                fit1 += opponent_reward
+        defender_id = info.get('defender_id')
+        if opponent_reward and defender_id:
+            fitness_map[defender_id] += opponent_reward
+
         if done:
             break
 
-    return fit1, fit2, stats
+    return fitness_map, stats
+
+

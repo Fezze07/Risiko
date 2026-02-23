@@ -47,10 +47,10 @@ export const DOM = {
     btnCtrlReset: document.getElementById("btn-ctrl-reset"),
     speedSlider: document.getElementById("speed-slider"),
     speedValue: document.getElementById("speed-value"),
+    toggleAutoSkipBattle: document.getElementById("toggle-autoskip-battle"),
     statsBar: document.getElementById("stats-bar"),
     leaderboardCurrent: document.getElementById("leaderboard-current"),
     playerLegend: document.getElementById("player-legend"),
-    encodingDebug: document.getElementById("encoding-debug"),
     territoryTooltip: document.getElementById("territory-tooltip"),
 };
 
@@ -202,9 +202,6 @@ export function showEncodingDebug(territoryId, data, pointer = null) {
         `Relative Enemy ID: ${data.enemyRelative.toFixed(3)}\n` +
         `Threat Level: ${data.threatLevel.toFixed(3)}`;
 
-    if (DOM.encodingDebug) {
-        DOM.encodingDebug.textContent = text;
-    }
     if (DOM.territoryTooltip && pointer) {
         DOM.territoryTooltip.textContent = text;
         DOM.territoryTooltip.style.left = `${pointer.x + 14}px`;
@@ -214,9 +211,6 @@ export function showEncodingDebug(territoryId, data, pointer = null) {
 }
 
 export function clearEncodingDebug() {
-    if (DOM.encodingDebug) {
-        DOM.encodingDebug.textContent = "Hover su un territorio per vedere le feature NN.";
-    }
     if (DOM.territoryTooltip) {
         DOM.territoryTooltip.classList.add("hidden");
     }
@@ -224,12 +218,7 @@ export function clearEncodingDebug() {
 
 export function showBattleOverlay(rollsAtt, rollsDef, meta) {
     if (!rollsAtt || !rollsDef) return;
-    if (gameState.isBattleModalOpen) return;
-    gameState.isBattleModalOpen = true;
-    if (gameState.ws && gameState.ws.readyState === WebSocket.OPEN) {
-        gameState.pauseForModal = true;
-        gameState.ws.send(JSON.stringify({ command: "CONTROL", action: "PAUSE" }));
-    }
+    if (gameState.isBattleModalOpen && !gameState.autoSkipBattle) return;
     DOM.diceAtt.innerHTML = "";
     DOM.diceDef.innerHTML = "";
     rollsAtt.forEach((val, i) => {
@@ -255,6 +244,24 @@ export function showBattleOverlay(rollsAtt, rollsDef, meta) {
         const dest = meta.dest !== undefined ? `#${meta.dest}` : "?";
         DOM.battleRoute.textContent = `${src} -> ${dest}`;
     }
+
+    if (gameState.autoSkipBattle) {
+        DOM.battleModal.classList.add("autoskipped");
+        DOM.battleModal.classList.remove("hidden");
+        if (gameState.autoSkipTimer) window.clearTimeout(gameState.autoSkipTimer);
+        gameState.autoSkipTimer = window.setTimeout(() => {
+            DOM.battleModal.classList.add("hidden");
+            DOM.battleModal.classList.remove("autoskipped");
+            gameState.autoSkipTimer = null;
+        }, 700);
+        return;
+    }
+
+    gameState.isBattleModalOpen = true;
+    if (gameState.ws && gameState.ws.readyState === WebSocket.OPEN) {
+        gameState.pauseForModal = true;
+        gameState.ws.send(JSON.stringify({ command: "CONTROL", action: "PAUSE" }));
+    }
     DOM.battleModal.classList.remove("hidden");
 }
 
@@ -262,6 +269,7 @@ export function closeBattleOverlay() {
     if (!gameState.isBattleModalOpen) return;
     gameState.isBattleModalOpen = false;
     DOM.battleModal.classList.add("hidden");
+    DOM.battleModal.classList.remove("autoskipped");
     if (gameState.pauseForModal && gameState.ws && gameState.ws.readyState === WebSocket.OPEN) {
         gameState.pauseForModal = false;
         gameState.ws.send(JSON.stringify({ command: "CONTROL", action: "PLAY" }));
@@ -452,7 +460,7 @@ export function updateSendButton() {
 }
 
 export function applySelectionHighlights() {
-    document.querySelectorAll(".territory-cell").forEach((rect) => {
+    document.querySelectorAll(".territory-circle").forEach((rect) => {
         rect.classList.remove("selected-src", "selected-dest");
     });
     document.querySelectorAll(".territory-group").forEach((g) => {
@@ -460,14 +468,14 @@ export function applySelectionHighlights() {
     });
 
     if (gameState.selectedSrc !== null) {
-        const rect = document.querySelector(`.territory-cell[data-id="${gameState.selectedSrc}"]`);
+        const rect = document.querySelector(`.territory-circle[data-id="${gameState.selectedSrc}"]`);
         if (rect) rect.classList.add("selected-src");
         const group = document.querySelector(`.territory-group[data-id="${gameState.selectedSrc}"]`);
         if (group) group.classList.add("selected");
     }
 
     if (gameState.selectedDest !== null) {
-        const rect = document.querySelector(`.territory-cell[data-id="${gameState.selectedDest}"]`);
+        const rect = document.querySelector(`.territory-circle[data-id="${gameState.selectedDest}"]`);
         if (rect) rect.classList.add("selected-dest");
         const group = document.querySelector(`.territory-group[data-id="${gameState.selectedDest}"]`);
         if (group) group.classList.add("selected");

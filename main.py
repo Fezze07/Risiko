@@ -23,11 +23,6 @@ def parse_args() -> argparse.Namespace:
         help="Sovrascrive il numero di generazioni dell'evoluzione.",
     )
     parser.add_argument(
-        '--long-session',
-        action='store_true',
-        help='Forza la sessione lunga (10^6 generazioni).',
-    )
-    parser.add_argument(
         '--max-workers',
         '-w',
         type=int,
@@ -41,7 +36,6 @@ class Main:
         self,
         *,
         generations: Optional[int],
-        long_session: bool,
         max_workers: Optional[int],
     ) -> None:
         init(autoreset=True)
@@ -49,7 +43,6 @@ class Main:
         self.env: RisikoEnvironment = RisikoEnvironment()
         self.evo_manager: EvolutionManager = EvolutionManager(self.env.board)
         self.max_generations = generations
-        self.use_long_session = long_session
         worker_count = max_workers or os.cpu_count() or 2
         self.executor = concurrent.futures.ProcessPoolExecutor(max_workers=worker_count)
 
@@ -67,19 +60,26 @@ class Main:
     def _determine_generations(self) -> Optional[int]:
         if self.max_generations is not None:
             return self.max_generations
-        if self.use_long_session or Config.DEBUG['LONG_SESSION']:
-            return None
         return Config.EVOLUTION['GENERATIONS']
 
     def _build_match_tasks(
         self, population: List[Agent]
-    ) -> List[Tuple[Agent, Agent, int, int]]:
-        tasks: List[Tuple[Agent, Agent, int, int]] = []
-        for i, agent in enumerate(population):
-            for j in range(1, Config.EVOLUTION['TOURNAMENT_SIZE'] + 1):
-                opponent_idx = (i + j) % len(population)
-                opponent = population[opponent_idx]
-                tasks.append((agent, opponent, i, opponent_idx))
+    ) -> List[Tuple[Tuple[Agent, ...], Tuple[int, ...]]]:
+        tasks: List[Tuple[Tuple[Agent, ...], Tuple[int, ...]]] = []
+        num_players = self.env.num_players
+        
+        # Per ogni agente nella popolazione, facciamo in modo che partecipi a circa TOURNAMENT_SIZE match
+        for i in range(len(population)):
+            for j in range(Config.EVOLUTION.get('TOURNAMENT_SIZE', 1)):
+                match_agents_indices = [i]
+                for k in range(1, num_players):
+                    # Seleziona altri agenti casuali o sequenziali per completare il tavolo
+                    opponent_idx = (i + j + k) % len(population)
+                    match_agents_indices.append(opponent_idx)
+                
+                match_agents = tuple(population[idx] for idx in match_agents_indices)
+                # Decoriamo il compito con gli indici reali per poter riassegnare il fitness dopo
+                tasks.append((match_agents, tuple(match_agents_indices)))
         return tasks
 
     def run_training_loop(self) -> None:
@@ -94,15 +94,15 @@ class Main:
                 agent.match_count = 0
 
             population = self.evo_manager.population
-            match_tasks = self._build_match_tasks(population)
-
-            batch_input = [(match[0], match[1]) for match in match_tasks]
+            match_tasks_data = self._build_match_tasks(population)
+            
+            # match_tasks_data contiene ((agente1, agente2, ...), (idx1, idx2, ...))
+            batch_input = [task[0] for task in match_tasks_data]
             results = list(
-                self.executor.map(run_parallel_match, batch_input, chunksize=10)
+                self.executor.map(run_parallel_match, batch_input, chunksize=5)
             )
 
             post_move_count = 0
-            post_move_qty_sum = 0
             post_move_risky = 0
 
             reinforce_count = 0
@@ -116,17 +116,15 @@ class Main:
             pass_count = 0
             total_actions = 0
 
-            for idx, (res_fit1, res_fit2, stats) in enumerate(results):
-                p1_idx = match_tasks[idx][2]
-                p2_idx = match_tasks[idx][3]
-
-                population[p1_idx].fitness += res_fit1
-                population[p1_idx].match_count += 1
-                population[p2_idx].fitness += res_fit2
-                population[p2_idx].match_count += 1
+            for idx, (fitness_map, stats) in enumerate(results):
+                agent_indices = match_tasks_data[idx][1]
+                
+                for player_slot, rew in fitness_map.items():
+                    agent_idx = agent_indices[player_slot - 1]
+                    population[agent_idx].fitness += rew
+                    population[agent_idx].match_count += 1
 
                 post_move_count += stats.get('post_move_count', 0)
-                post_move_qty_sum += stats.get('post_move_qty_sum', 0)
                 post_move_risky += stats.get('post_move_risky', 0)
 
                 reinforce_count += stats.get('reinforce_count', 0)
@@ -158,10 +156,8 @@ class Main:
             best_agent = max(population, key=lambda x: x.fitness)
             avg_fitness = sum(a.fitness for a in population) / len(population)
 
-            post_move_avg = 0.0
             post_move_risky_pct = 0.0
             if post_move_count > 0:
-                post_move_avg = post_move_qty_sum / post_move_count
                 post_move_risky_pct = (post_move_risky / post_move_count) * 100
 
             reinforce_avg = 0.0
@@ -192,7 +188,7 @@ class Main:
             metrics = {
                 "reinforce_avg": reinforce_avg,
                 "attack_avg": attack_avg,
-                "post_move_avg": post_move_avg,
+                "post_attack_avg": post_attack_avg,
                 "maneuver_avg": maneuver_avg,
                 "risky_pct": post_move_risky_pct,
                 "pass_pct": pass_pct,
@@ -223,7 +219,7 @@ class Main:
                 f"| Avg: {avg_color}{avg_fitness:.2f}{Style.RESET_ALL}"
                 f"| Risky: {risky_color}{post_move_risky_pct:.1f}%{Style.RESET_ALL} \n"
                 f"| Reinforce avg: {reinforce_avg:.2f} | Attack avg: {attack_avg:.2f} "
-                f"| PostMove avg: {post_move_avg:.2f} | Maneuver avg: {maneuver_avg:.2f} \n"
+                f"| PostAttack avg: {post_attack_avg:.2f} | Maneuver avg: {maneuver_avg:.2f} \n"
                 f"| Pass: {pass_pct:.1f}% | Rein: {reinforce_pct:.1f}% | Att: {attack_pct:.1f}% "
                 f"| Post: {post_attack_pct:.1f}% | Man: {maneuver_pct:.1f}%\n"
             )
@@ -233,11 +229,7 @@ class Main:
 
 def main() -> None:
     args = parse_args()
-    Main(
-        generations=args.generations,
-        long_session=args.long_session,
-        max_workers=args.max_workers,
-    )
+    Main(generations=args.generations, max_workers=args.max_workers)
 
 if __name__ == '__main__':
     main()
