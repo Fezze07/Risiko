@@ -26,6 +26,11 @@ export function getTerritoryById(id) {
     return gameState.boardData.territories.find((t) => t.id === id) || null;
 }
 
+export function getTerritoryName(id) {
+    const t = getTerritoryById(id);
+    return t && t.name ? t.name : `#${id}`;
+}
+
 function getPlayerMeta(playerId) {
     if (!gameState.playerMap) return null;
     return gameState.playerMap[playerId] || gameState.playerMap[String(playerId)] || null;
@@ -194,7 +199,9 @@ function handleStateUpdate(msg) {
 }
 
 function handlePostAttackRequired(msg) {
-    addLog(`[INFO] Conquista: scegli spostamento (#${msg.src} -> #${msg.dest})`, "log-info");
+    const srcName = getTerritoryName(msg.src);
+    const destName = getTerritoryName(msg.dest);
+    addLog(`[INFO] Conquista: scegli spostamento (${srcName} -> ${destName})`, "log-info");
     gameState.currentPhase = "POST_ATTACK_MOVE";
     DOM.phaseValue.textContent = "POST_ATTACK_MOVE";
     gameState.selectedSrc = msg.src;
@@ -202,8 +209,8 @@ function handlePostAttackRequired(msg) {
 
     const tSrc = getTerritoryById(gameState.selectedSrc);
     const tDest = getTerritoryById(gameState.selectedDest);
-    DOM.selSrc.textContent = `#${gameState.selectedSrc} (${tSrc ? tSrc.armies : "?"} armies)`;
-    DOM.selDest.textContent = `#${gameState.selectedDest} (${tDest ? tDest.armies : "?"} armies)`;
+    DOM.selSrc.textContent = `${srcName} (${tSrc ? tSrc.armies : "?"} armies)`;
+    DOM.selDest.textContent = `${destName} (${tDest ? tDest.armies : "?"} armies)`;
     applySelectionHighlights();
     updateQuantityUI();
     gameState.currentQty = gameState.maxQty;

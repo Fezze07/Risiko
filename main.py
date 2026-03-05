@@ -98,55 +98,57 @@ class Main:
             
             # match_tasks_data contiene ((agente1, agente2, ...), (idx1, idx2, ...))
             batch_input = [task[0] for task in match_tasks_data]
-            results = list(
-                self.executor.map(run_parallel_match, batch_input, chunksize=5)
-            )
-
-            post_move_count = 0
-            post_move_risky = 0
-
-            reinforce_count = 0
-            reinforce_reward_sum = 0
-            attack_count = 0
-            attack_reward_sum = 0
-            post_attack_count = 0
-            post_attack_reward_sum = 0
-            maneuver_count = 0
-            maneuver_reward_sum = 0
-            pass_count = 0
+            
+            # Esecuzione parallela
+            results = list(self.executor.map(run_parallel_match, batch_input))
+            
+            # Accumulo risultati
             total_actions = 0
+            pass_count = 0
+            reinforce_count = 0
+            attack_count = 0
+            post_attack_count = 0
+            maneuver_count = 0
+            
+            reinforce_reward_sum = 0.0
+            attack_reward_sum = 0.0
+            post_attack_reward_sum = 0.0
+            maneuver_reward_sum = 0.0
+            
+            post_move_risky = 0
+            post_move_count = 0
 
-            for idx, (fitness_map, stats) in enumerate(results):
-                agent_indices = match_tasks_data[idx][1]
+            for res_idx, (fitness_scores, stats) in enumerate(results):
+                player_indices = match_tasks_data[res_idx][1]
+                for i, player_idx in enumerate(player_indices):
+                    player_id = i + 1
+                    population[player_idx].fitness += fitness_scores.get(player_id, 0)
+                    population[player_idx].match_count += 1
                 
-                for player_slot, rew in fitness_map.items():
-                    agent_idx = agent_indices[player_slot - 1]
-                    population[agent_idx].fitness += rew
-                    population[agent_idx].match_count += 1
-
-                post_move_count += stats.get('post_move_count', 0)
-                post_move_risky += stats.get('post_move_risky', 0)
-
-                reinforce_count += stats.get('reinforce_count', 0)
-                reinforce_reward_sum += stats.get('reinforce_reward_sum', 0)
-                attack_count += stats.get('attack_count', 0)
-                attack_reward_sum += stats.get('attack_reward_sum', 0)
-                post_attack_count += stats.get('post_attack_move_count', 0)
-                post_attack_reward_sum += stats.get('post_attack_move_reward_sum', 0)
-                maneuver_count += stats.get('maneuver_count', 0)
-                maneuver_reward_sum += stats.get('maneuver_reward_sum', 0)
-                pass_count += stats.get('pass_count', 0)
+                # Somma statistiche globali della generazione
                 total_actions += stats.get('total_actions', 0)
+                pass_count += stats.get('pass_count', 0)
+                reinforce_count += stats.get('reinforce_count', 0)
+                attack_count += stats.get('attack_count', 0)
+                post_attack_count += stats.get('post_attack_move_count', 0)
+                maneuver_count += stats.get('maneuver_count', 0)
+                
+                reinforce_reward_sum += stats.get('reinforce_reward_sum', 0.0)
+                attack_reward_sum += stats.get('attack_reward_sum', 0.0)
+                post_attack_reward_sum += stats.get('post_attack_move_reward_sum', 0.0)
+                maneuver_reward_sum += stats.get('maneuver_reward_sum', 0.0)
+                
+                post_move_risky += stats.get('post_move_risky', 0)
+                post_move_count += stats.get('post_move_count', 0)
 
-            for agent in self.evo_manager.population:
+            # Normalizzazione fitness per il numero di match giocati
+            for agent in population:
                 if agent.match_count > 0:
                     agent.fitness /= agent.match_count
 
+            # Imitation Learning: carica campioni umani e applica bonus
             if Config.HUMAN_DATA.get("ENABLED", False):
-                samples = load_samples(
-                    Config.HUMAN_DATA["DATASET_PATH"],
-                    Config.HUMAN_DATA.get("SAMPLE_SIZE"),
-                )
+                samples = load_samples(Config.HUMAN_DATA.get("DATASET_PATH", "dataset/human_dataset.jsonl"))
                 if len(samples) >= Config.HUMAN_DATA.get("MIN_SAMPLES", 0):
                     weight = float(Config.HUMAN_DATA.get("IMITATION_WEIGHT", 0.0))
                     if weight > 0:
@@ -173,40 +175,17 @@ class Main:
             if maneuver_count > 0:
                 maneuver_avg = maneuver_reward_sum / maneuver_count
 
-            pass_pct = 0.0
-            reinforce_pct = 0.0
-            attack_pct = 0.0
-            post_attack_pct = 0.0
-            maneuver_pct = 0.0
-            if total_actions > 0:
-                pass_pct = (pass_count / total_actions) * 100
-                reinforce_pct = (reinforce_count / total_actions) * 100
-                attack_pct = (attack_count / total_actions) * 100
-                post_attack_pct = (post_attack_count / total_actions) * 100
-                maneuver_pct = (maneuver_count / total_actions) * 100
-
-            metrics = {
-                "reinforce_avg": reinforce_avg,
-                "attack_avg": attack_avg,
-                "post_attack_avg": post_attack_avg,
-                "maneuver_avg": maneuver_avg,
-                "risky_pct": post_move_risky_pct,
-                "pass_pct": pass_pct,
-                "reinforce_pct": reinforce_pct,
-                "attack_pct": attack_pct,
-                "post_pct": post_attack_pct,
-                "maneuver_pct": maneuver_pct,
-            }
-            is_new_record = TrainerUtils.update_records(
-                best_agent.fitness, avg_fitness, metrics
-            )
-            if is_new_record:
-                print('NUOVO RECORD STORICO REGISTRATO!')
+            pass_pct = (pass_count / total_actions * 100) if total_actions > 0 else 0
+            reinforce_pct = (reinforce_count / total_actions * 100) if total_actions > 0 else 0
+            attack_pct = (attack_count / total_actions * 100) if total_actions > 0 else 0
+            post_attack_pct = (post_attack_count / total_actions * 100) if total_actions > 0 else 0
+            maneuver_pct = (maneuver_count / total_actions * 100) if total_actions > 0 else 0
 
             self.evo_manager.save_best_agent('best_agent.pkl')
 
             best_color = Fore.GREEN if best_agent.fitness >= 0 else Fore.RED
             avg_color = Fore.GREEN if avg_fitness >= 0 else Fore.RED
+            
             if post_move_risky_pct >= 50:
                 risky_color = Fore.RED
             elif post_move_risky_pct >= 30:

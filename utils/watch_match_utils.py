@@ -1,4 +1,5 @@
 from typing import Dict, Any
+from core.world import TERRITORIES
 
 
 class WatchMatchUtils:
@@ -11,8 +12,9 @@ class WatchMatchUtils:
         if reward >= Config.REWARD['WIN']:
             return 'VITTORIA'
 
+        reasons = []
+
         if action_type == 'REINFORCE':
-            reasons = []
             if info.get('continent_held'):
                 reasons.append('Bonus continente')
             
@@ -33,10 +35,8 @@ class WatchMatchUtils:
             if info.get('repeat_reinforce_penalty'):
                 count = info.get('repeat_reinforce_count', '')
                 reasons.append(f'Malus ripetizione (n.{count})' if count else 'Malus ripetizione')
-            
-            return ' | '.join(reasons) if reasons else 'Rinforzo'
 
-        if action_type == 'ATTACK':
+        elif action_type == 'ATTACK':
             if info.get('conquered'):
                 msg = 'Conquista'
                 if info.get('continent_complete'):
@@ -45,75 +45,72 @@ class WatchMatchUtils:
                     msg += ' + continente rotto'
                 if info.get('post_attack_move_required'):
                     msg += ' | scegli spostamento'
-                return msg
+                reasons.append(msg)
+            else:
+                if info.get('defended'):
+                    reasons.append('difesa riuscita')
+                if info.get('risky_attack'):
+                    reasons.append('attacco rischioso')
+                if info.get('left_one_army_src'):
+                    reasons.append('1 armata sorgente')
+                if info.get('avoid_risk'):
+                    reasons.append('evita rischio')
+                if info.get('safe_action_bonus'):
+                    reasons.append('bonus azione sicura')
+                if reward < 0:
+                    reasons.append('persa armata')
+                elif reward > 0:
+                    reasons.append('uccisa armata nemica')
 
-            parts = []
-            if info.get('defended'):
-                parts.append('difesa riuscita')
-            if info.get('risky_attack'):
-                parts.append('attacco rischioso')
-            if info.get('left_one_army_src'):
-                parts.append('1 armata sorgente')
-            if info.get('avoid_risk'):
-                parts.append('evita rischio')
-            if info.get('safe_action_bonus'):
-                parts.append('bonus azione sicura')
-            if reward < 0:
-                parts.append('persa armata')
-            elif reward > 0:
-                parts.append('uccisa armata nemica')
-            if parts:
-                return ' | '.join(parts)
-            return 'Nulla di fatto'
-
-        if action_type == 'POST_ATTACK_MOVE':
-            parts = []
+        elif action_type == 'POST_ATTACK_MOVE':
             if 'post_attack_move_qty' in info:
-                parts.append(f"spostate {info['post_attack_move_qty']}")
+                reasons.append(f"spostate {info['post_attack_move_qty']}")
             if info.get('risky_attack_conquer'):
-                parts.append('nuovo territorio rischioso')
+                reasons.append('nuovo territorio rischioso')
             if info.get('left_one_army_src'):
-                parts.append('1 armata sorgente')
+                reasons.append('1 armata sorgente')
             if info.get('left_one_army_dest'):
-                parts.append('1 armata nuovo territorio')
+                reasons.append('1 armata nuovo territorio')
             if info.get('avoid_risk'):
-                parts.append('evita rischio')
+                reasons.append('evita rischio')
             if info.get('safe_action_bonus'):
-                parts.append('bonus azione sicura')
+                reasons.append('bonus azione sicura')
             if info.get('forced_post_attack_move'):
-                parts.append('forzato')
-            if parts:
-                return ' | '.join(parts)
-            return 'Spostamento post conquista'
+                reasons.append('forzato')
 
-        if action_type == 'MANEUVER':
-            parts = []
+        elif action_type == 'MANEUVER':
             if info.get('maneuver_strategic'):
-                parts.append('Mossa strategica (fronte)')
+                reasons.append('Mossa strategica (fronte)')
             elif info.get('maneuver_strategic_stacked'):
-                parts.append('Eccesso truppe al fronte (malus)')
+                reasons.append('Eccesso truppe al fronte (malus)')
             elif info.get('maneuver_safe_to_safe'):
-                parts.append('Spostamento interno')
+                reasons.append('Spostamento interno')
             elif info.get('maneuver_away_from_front'):
-                parts.append('Ritirata (malus)')
+                reasons.append('Ritirata (malus)')
             
             if info.get('stack_penalty'):
                 excess = info.get('stack_excess', '')
-                parts.append(f'Malus stacking (eccesso: {excess})' if excess else 'Malus stacking')
+                reasons.append(f'Malus stacking (eccesso: {excess})' if excess else 'Malus stacking')
             
             if info.get('left_one_army_src'):
-                parts.append('1 armata sorgente')
+                reasons.append('1 armata sorgente')
             if info.get('frontline_stable'):
-                parts.append('fronte stabile')
+                reasons.append('fronte stabile')
             if info.get('frontline_fortified'):
-                parts.append('fronte fortificato')
-            
-            if parts:
-                return ' | '.join(parts)
-            return 'OK'
-
-        if info.get('safe_action_bonus'):
-            return 'bonus azione sicura'
+                reasons.append('fronte fortificato')
+        
+        # Add global reasons to any action
+        if info.get('safe_action_bonus') and not any('azione sicura' in r.lower() for r in reasons):
+            reasons.append('bonus azione sicura')
+        
+        if info.get('progress_reward'):
+            reasons.append('Progresso mappa')
+        if info.get('game_length_penalty'):
+            reasons.append('Penalità tempo')
+        
+        if reasons:
+            return ' | '.join(reasons)
+        
         return 'OK'
 
     @staticmethod
@@ -122,13 +119,22 @@ class WatchMatchUtils:
         a_type = action['type']
         qty_pct = int(action.get('qty', 0) * 100)
 
+        def get_name(t_id):
+            if t_id is None: return "--"
+            return TERRITORIES.get(t_id, {}).get("name", f"{t_id:02d}")
+        TERRITORY_COL_WIDTH = 25
+
         if a_type == 'PASS':
-            return f"{p_tag} | {a_type:<16} | -- -> -- | ---- | Rew: {float(reward):>7.2f} | {reason}"
+            return f"{p_tag} | {a_type:<16} | {'-- -> --':<{TERRITORY_COL_WIDTH}} | {'----':<4} | Rew: {float(reward):>7.2f} | {reason}"
 
         if a_type == 'REINFORCE':
-            return f"{p_tag} | {a_type:<16} | -> {action['dest']:02d}    | x{qty_pct:02d}% | Rew: {float(reward):>7.2f} | {reason}"
+            dest_name = get_name(action.get('dest'))
+            formatted_dest = f"-> {dest_name}"
+            return f"{p_tag} | {a_type:<16} | {formatted_dest:<{TERRITORY_COL_WIDTH}} | x{qty_pct:02d}% | Rew: {float(reward):>7.2f} | {reason}"
 
-        if a_type == 'POST_ATTACK_MOVE':
-            return f"{p_tag} | {a_type:<16} | {action['src']:02d} -> {action['dest']:02d} | x{qty_pct:02d}% | Rew: {float(reward):>7.2f} | {reason}"
-
-        return f"{p_tag} | {a_type:<16} | {action['src']:02d} -> {action['dest']:02d} | x{qty_pct:02d}% | Rew: {float(reward):>7.2f} | {reason}"
+        src_name = get_name(action.get('src'))
+        dest_name = get_name(action.get('dest'))
+        formatted_src_dest = f"{src_name} -> {dest_name}"
+        
+        # Struttura: P1 | ATTACK | NomeSorgente -> NomeDestinazione | x100% | Rew: 100.00 | Ragione
+        return f"{p_tag} | {a_type:<16} | {formatted_src_dest:<{TERRITORY_COL_WIDTH}} | x{qty_pct:02d}% | Rew: {float(reward):>7.2f} | {reason}"

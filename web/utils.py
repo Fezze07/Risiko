@@ -141,4 +141,6 @@ def format_mission(mission: Dict[str, Any]) -> str:
         return f"Controlla {int(target * 100)}% dei territori"
     if m_type == "continents":
         return f"Conquista: {', '.join(target)}"
+    if m_type == "continent_count":
+        return f"Controlla {target} continenti a tua scelta"
     return "Sconosciuta"

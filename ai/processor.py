@@ -160,13 +160,11 @@ class Processor:
         elif current_phase == "ATTACK":
             attack_threshold = Config.NN.get("ATTACK_DECISION_THRESHOLD", 0.4)
             valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
+            valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
             min_ratio = float(Config.NN.get("ATTACK_MIN_RATIO", 1.0))
             min_adv = int(Config.REWARD.get("PASS_ATTACK_MIN_ADVANTAGE", 0))
-            force_min_ratio = float(Config.NN.get("ATTACK_FORCE_MIN_RATIO", max(min_ratio, 1.25)))
-            force_min_adv = int(Config.REWARD.get("ATTACK_FORCE_MIN_ADVANTAGE", max(min_adv, 2)))
 
             candidates = []
-            force_candidates = []
             for src_id in valid_sources:
                 enemies = [
                     n for n in board.territories[src_id].neighbors
@@ -196,27 +194,12 @@ class Processor:
                     score = (2.0 * ratio) + float(advantage) - (0.5 * src_enemy_pressure)
                     entry = (score, src_id, dest_id, ratio, advantage)
                     candidates.append(entry)
-                    if (
-                        attacker_armies >= 4
-                        and ratio >= force_min_ratio
-                        and advantage >= force_min_adv
-                    ):
-                        force_candidates.append(entry)
 
             should_attack = raw_decision > attack_threshold
-            forced_attack = False
-            if not should_attack and force_candidates:
-                should_attack = True
-                forced_attack = True
-
             if should_attack and candidates:
-                if forced_attack:
-                    best = max(force_candidates, key=lambda c: c[0])
-                    src_id, dest_id = best[1], best[2]
-                else:
-                    idx = int(raw_src * len(candidates))
-                    picked = candidates[min(idx, len(candidates) - 1)]
-                    src_id, dest_id = picked[1], picked[2]
+                idx = int(raw_src * len(candidates))
+                picked = candidates[min(idx, len(candidates) - 1)]
+                src_id, dest_id = picked[1], picked[2]
                 action = {
                     "type": "ATTACK",
                     "src": src_id,

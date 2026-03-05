@@ -1,5 +1,5 @@
 import { gameState } from "./state.js";
-import { getTerritoryById, triggerPhaseAlert } from "./game.js";
+import { getTerritoryById, getTerritoryName, triggerPhaseAlert } from "./game.js";
 
 export const DOM = {
     boardSvg: document.getElementById("board-svg"),
@@ -23,6 +23,7 @@ export const DOM = {
     gameOverModal: document.getElementById("game-over-modal"),
     gameOverTitle: document.getElementById("game-over-title"),
     gameOverMsg: document.getElementById("game-over-msg"),
+    gameResultScores: document.getElementById("game-result-scores"),
     btnZoomIn: document.getElementById("btn-zoom-in"),
     btnZoomOut: document.getElementById("btn-zoom-out"),
     btnZoomReset: document.getElementById("btn-zoom-reset"),
@@ -33,11 +34,11 @@ export const DOM = {
     battleRoute: document.getElementById("battle-route"),
     diceAtt: document.getElementById("dice-attacker"),
     diceDef: document.getElementById("dice-defender"),
+    diceAtt: document.getElementById("dice-attacker"),
+    diceDef: document.getElementById("dice-defender"),
     phasePrompt: document.getElementById("phase-prompt"),
     promptTitle: document.getElementById("prompt-title"),
     promptText: document.getElementById("prompt-text"),
-    p1FinalReward: document.getElementById("p1-final-reward"),
-    p2FinalReward: document.getElementById("p2-final-reward"),
     landingOverlay: document.getElementById("landing-overlay"),
     btnModePlay: document.getElementById("btn-mode-play"),
     btnModeWatch: document.getElementById("btn-mode-watch"),
@@ -218,7 +219,10 @@ export function clearEncodingDebug() {
 
 export function showBattleOverlay(rollsAtt, rollsDef, meta) {
     if (!rollsAtt || !rollsDef) return;
-    if (gameState.isBattleModalOpen && !gameState.autoSkipBattle) return;
+    // Se l'autoskip è attivo, non mostriamo nulla e usciamo subito
+    if (gameState.autoSkipBattle) return;
+
+    if (gameState.isBattleModalOpen) return;
     DOM.diceAtt.innerHTML = "";
     DOM.diceDef.innerHTML = "";
     rollsAtt.forEach((val, i) => {
@@ -240,21 +244,9 @@ export function showBattleOverlay(rollsAtt, rollsDef, meta) {
         const defenderId = meta.defender_id !== undefined ? meta.defender_id : "?";
         DOM.battleAttackerLabel.textContent = `Attacker P${attackerId}`;
         DOM.battleDefenderLabel.textContent = `Defender P${defenderId}`;
-        const src = meta.src !== undefined ? `#${meta.src}` : "?";
-        const dest = meta.dest !== undefined ? `#${meta.dest}` : "?";
-        DOM.battleRoute.textContent = `${src} -> ${dest}`;
-    }
-
-    if (gameState.autoSkipBattle) {
-        DOM.battleModal.classList.add("autoskipped");
-        DOM.battleModal.classList.remove("hidden");
-        if (gameState.autoSkipTimer) window.clearTimeout(gameState.autoSkipTimer);
-        gameState.autoSkipTimer = window.setTimeout(() => {
-            DOM.battleModal.classList.add("hidden");
-            DOM.battleModal.classList.remove("autoskipped");
-            gameState.autoSkipTimer = null;
-        }, 700);
-        return;
+        const srcName = meta.src !== undefined ? getTerritoryName(meta.src) : "?";
+        const destName = meta.dest !== undefined ? getTerritoryName(meta.dest) : "?";
+        DOM.battleRoute.textContent = `${srcName} -> ${destName}`;
     }
 
     gameState.isBattleModalOpen = true;
@@ -392,7 +384,31 @@ export function handleGameOver(msg) {
         winnerDisplay = "PAREGGIO";
     }
     DOM.gameOverTitle.textContent = winnerDisplay;
+
     DOM.gameOverMsg.textContent = `Risultato missione: ${msg.message}`;
+
+    if (DOM.gameResultScores && msg.scores) {
+        DOM.gameResultScores.innerHTML = "";
+        Object.entries(msg.scores).forEach(([id, score]) => {
+            const meta = getPlayerMeta(id);
+            const role = meta ? String(meta.type || "AI").toUpperCase() : "AI";
+
+            const item = document.createElement("div");
+            item.className = "modal-score-item";
+
+            const label = document.createElement("span");
+            label.textContent = `${role} P${id}`;
+
+            const val = document.createElement("span");
+            val.className = "score-value";
+            val.textContent = score;
+
+            item.appendChild(label);
+            item.appendChild(val);
+            DOM.gameResultScores.appendChild(item);
+        });
+    }
+
     if (msg.player_stats) {
         updateLeaderboard(msg.player_stats, gameState.currentPlayer);
         updateScoreBar(msg.player_stats);

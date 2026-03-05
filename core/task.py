@@ -29,4 +29,13 @@ class MissionManager:
                     return False
             return True  # Se il loop finisce bene, hai vinto
 
+        #3 Obiettivo: Numero di continenti a scelta
+        elif m_type == "continent_count":
+            owned_count = 0
+            for name, data in Config.CONTINENTS.items():
+                t_ids = data["t_ids"]
+                if all(board.territories[tid].owner_id == player_id for tid in t_ids):
+                    owned_count += 1
+            return owned_count >= mission["target"]
+
         return False

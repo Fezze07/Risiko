@@ -7,10 +7,11 @@ class Config:
     GAME: Dict[str, Any] = {
         "NUM_TERRITORIES": 42,
         "MAX_TURNS": 250,
-        "NUM_PLAYERS": 8,
+        "NUM_PLAYERS": 6,
         "INITIAL_PLACEMENT_ARMIES_PER_TERRITORY": 1.5,
         "INITIAL_PLACEMENT_STEP_DIVISOR": 4,
         "MAX_ARMIES_PER_TERRITORY": 30,
+        "RISK_RATIO": 1.7,
         "MAX_TOTAL_ARMIES": 100,
         "STARTING_ARMIES": 1,
         "BONUS_ARMIES_DIVISOR": 3,
@@ -63,8 +64,7 @@ class Config:
         "EPSILON-GREEDY": 0.12,
         "ATTACK_DECISION_THRESHOLD": 0.2,
         "MANEUVER_DECISION_THRESHOLD": 0.45,
-        "ATTACK_MIN_RATIO": 1.1,
-        "ATTACK_FORCE_MIN_RATIO": 1.35,
+        "ATTACK_MIN_RATIO": 1.0,
     }
 
     # =========================================
@@ -93,7 +93,7 @@ class Config:
     # 👤 HUMAN DATASET (Imitation Learning)
     # =========================================
     HUMAN_DATA: Dict[str, Any] = {
-        "ENABLED": False,
+        "ENABLED": True,
         "DATASET_PATH": "dataset/human_dataset.jsonl",
         "MIN_SAMPLES": 100,
         "SAMPLE_SIZE": 512,
@@ -105,34 +105,31 @@ class Config:
     # =========================================
     REWARD: Dict[str, int] = {
         # --- ESITI PARTITA ---
-        "WIN": 6000,
+        "WIN": 7000,
         "LOSS": -8000,
         "STALEMATE_PENALTY": -4000,
         # --- RINFORZI ---
         "REINFORCE_ARMY": 0,
-        "REINFORCE_STRATEGIC_MULT": 4,
+        "REINFORCE_STRATEGIC_MULT": 2,
         "REINFORCE_SAFE_MULT": 0,
         "REINFORCE_SAFE_PENALTY": -25,
         "REINFORCE_STACK_PENALTY": -25,
         "REINFORCE_STACK_THRESHOLD": 12,
         "REINFORCE_REPEAT_PENALTY": -30,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 120,
+        "CONQUER_TERRITORY": 250,
         "LOSE_TERRITORY": -300,
-        "KILL_ENEMY_ARMY": 25,
+        "KILL_ENEMY_ARMY": 30,
         "LOSE_ARMY": -8,
         "ATTACK_RISK_PENALTY": -140,
         "AVOID_RISK_BONUS": 35,
         "LEAVE_ONE_ARMY_PENALTY": -280,
-        "POST_ATTACK_RISK_PENALTY": -240,
-        "POST_ATTACK_LEAVE_ONE_PENALTY": -360,
+        "POST_ATTACK_RISK_PENALTY": -200,
+        "POST_ATTACK_LEAVE_ONE_PENALTY": -300,
         "CONQUEST_STREAK_CAP": 3,
         "PASS_ATTACK_PENALTY": -40,
         "PASS_REPEAT_PENALTY": -10,
-        "PASS_PENALTY_CAP": -300,
-        "PASS_ATTACK_MIN_ADVANTAGE": 2,
-        "ATTACK_FORCE_MIN_ADVANTAGE": 3,
-        "ARMY_LIMIT_PENALTY": -80,
+        "PASSIVE_TURN_PENALTY": -10,
         # --- DIFESA / PRESIDIO ---
         "DEFEND_BONUS": 25,
         "DEFEND_HOLD_TERRITORY": 70,

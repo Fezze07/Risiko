@@ -27,7 +27,7 @@ def encode_action_target(board, player_id: int, phase: str, action: Dict[str, An
     src_val = 0.0
     dest_val = 0.0
 
-    if phase == "REINFORCE":
+    if phase in ("REINFORCE", "INITIAL_PLACEMENT"):
         valid_targets = [
             t_id
             for t_id, t in board.territories.items()

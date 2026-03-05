@@ -39,19 +39,18 @@ async def ws_game_handler(
     env: Optional[RisikoEnvironment] = None
     processor: Optional[Processor] = None
     coords: Dict[int, Dict[str, float]] = {}
-    cols: int = 5
+    cols: int = 0
     ai_agents: Dict[int, Any] = {}
-    mode: Optional[str] = None  # PLAY | WATCH
-    running: bool = False
+    mode: str = ""
     game_over: bool = False
+    running: bool = False
     delay_ms: int = DEFAULT_WATCH_DELAY_MS
-    action_log: List[str] = []
-    runner_task: Optional[asyncio.Task] = None
-
-    num_players: int = max(MIN_PLAYERS, min(MAX_PLAYERS, int(initial_num_players)))
+    num_players: int = initial_num_players
     player_map: Dict[int, Dict[str, Any]] = {}
     human_players: Set[int] = set()
     player_scores: Dict[int, int] = {}
+    action_log: List[str] = []
+    runner_task: Optional[asyncio.Task] = None
 
     async def send_json(data: Dict[str, Any]) -> None:
         try:
@@ -61,123 +60,70 @@ async def ws_game_handler(
 
     def clamp_delay(value: Any) -> int:
         try:
-            parsed = int(value)
-        except (TypeError, ValueError):
-            parsed = DEFAULT_WATCH_DELAY_MS
-        return max(MIN_DELAY_MS, min(MAX_DELAY_MS, parsed))
+            v = int(value)
+            return max(MIN_DELAY_MS, min(MAX_DELAY_MS, v))
+        except (ValueError, TypeError):
+            return delay_ms
 
     def clamp_players(value: Any) -> int:
         try:
-            parsed = int(value)
-        except (TypeError, ValueError):
-            parsed = MIN_PLAYERS
-        return max(MIN_PLAYERS, min(MAX_PLAYERS, parsed))
+            v = int(value)
+            return max(MIN_PLAYERS, min(MAX_PLAYERS, v))
+        except (ValueError, TypeError):
+            return num_players
 
     def get_delay_seconds() -> float:
-        return max(0.0, delay_ms / 1000.0)
+        return delay_ms / 1000.0
 
     def get_colors(total: int) -> Dict[int, str]:
-        if color_provider is None:
-            return fallback_player_colors(total)
-        try:
-            provided = color_provider(total)
-        except Exception:
-            return fallback_player_colors(total)
-        if not isinstance(provided, dict):
-            return fallback_player_colors(total)
-        fallback = fallback_player_colors(total)
-        for p_id in range(1, total + 1):
-            if p_id not in provided:
-                provided[p_id] = fallback[p_id]
-        return provided
+        if color_provider:
+            try:
+                return color_provider(total)
+            except Exception:
+                pass
+        return fallback_player_colors(total)
 
     def build_player_map(
         selected_mode: str, total_players: int, payload: Optional[Dict[str, Any]] = None
     ) -> Dict[int, Dict[str, Any]]:
-        payload = payload or {}
-        roles: Dict[int, str] = {
-            p_id: ("HUMAN" if selected_mode == "PLAY" and p_id == 1 else "AI")
-            for p_id in range(1, total_players + 1)
-        }
-        raw_types = payload.get("player_types")
-        if raw_types is None:
-            raw_types = payload.get("players")
-
-        if isinstance(raw_types, dict):
-            for key, value in raw_types.items():
-                try:
-                    p_id = int(key)
-                except (TypeError, ValueError):
-                    continue
-                if 1 <= p_id <= total_players:
-                    roles[p_id] = normalize_role(value)
-        elif isinstance(raw_types, list):
-            for idx, value in enumerate(raw_types, start=1):
-                if idx > total_players:
-                    break
-                roles[idx] = normalize_role(value)
-
-        if selected_mode == "WATCH":
-            for p_id in roles:
-                roles[p_id] = "AI"
-        elif selected_mode == "PLAY" and not any(role == "HUMAN" for role in roles.values()):
-            roles[1] = "HUMAN"
-
         colors = get_colors(total_players)
-        result: Dict[int, Dict[str, Any]] = {}
+        mapping = {}
+        payload = payload or {}
+        p_types = payload.get("player_types", {})
+
         for p_id in range(1, total_players + 1):
-            result[p_id] = {
+            sid = str(p_id)
+            if selected_mode == "WATCH":
+                p_type = "AI"
+            else:
+                p_type = normalize_role(p_types.get(sid, "AI" if p_id > 1 else "HUMAN"))
+
+            mapping[p_id] = {
                 "id": p_id,
-                "type": roles[p_id],
-                "color": colors[p_id],
+                "type": p_type,
+                "color": colors.get(p_id, "#888888"),
             }
-        return result
+        return mapping
 
     def get_mission_for_player(player_id: int) -> Dict[str, Any]:
         if not env:
             return {}
-        mission = env.get_player_mission(player_id)
-        if mission:
-            return mission
-        if player_id == 1:
-            return env.p1_mission
-        if player_id == 2:
-            return env.p2_mission
-        return {}
+        return env.get_player_mission(player_id)
 
     def parse_human_action(msg: Dict[str, Any]) -> Dict[str, Any]:
-        action_type = str(msg.get("action_type", "PASS")).upper()
-        action: Dict[str, Any] = {"type": action_type}
-        if action_type == "REINFORCE":
-            action["src"] = msg.get("dest", 0)
-            action["dest"] = msg.get("dest", 0)
-            action["qty"] = msg.get("qty", 0.0)
-        elif action_type == "ATTACK":
-            action["src"] = msg.get("src", 0)
-            action["dest"] = msg.get("dest", 0)
-        elif action_type == "POST_ATTACK_MOVE":
-            action["src"] = env.pending_attack_src if env else 0
-            action["dest"] = env.pending_attack_dest if env else 0
-            action["qty"] = msg.get("qty", 0.5)
-        elif action_type == "MANEUVER":
-            action["src"] = msg.get("src", 0)
-            action["dest"] = msg.get("dest", 0)
-            action["qty"] = msg.get("qty", 0.5)
-        else:
-            action["src"] = 0
-            action["dest"] = 0
-            action["qty"] = 0.0
-        return action
+        return {
+            "type": str(msg.get("action_type", "PASS")).upper(),
+            "src": msg.get("src"),
+            "dest": msg.get("dest"),
+            "qty": float(msg.get("qty", 0.0)),
+        }
 
     def prepare_reinforce(player_id: int) -> None:
         if not env:
             return
-        if env.current_phase == "REINFORCE" and not env.has_reinforced:
-            bonus = env._get_available_bonus(player_id)
-            if bonus > 0:
-                env.armies_to_place = bonus
-                env.armies_to_place_total = bonus
-                env.has_reinforced = True
+        if env.current_phase == "REINFORCE" and env.player_turn == player_id:
+            # Side effect inside environment.py step trigger
+            pass
 
     def is_human_turn() -> bool:
         if not env:
@@ -224,8 +170,7 @@ async def ws_game_handler(
             "current_player": env.player_turn,
             "phase": env.current_phase,
             "turn": env.current_turn,
-            "p1_score": int(player_scores.get(1, 0)),
-            "p2_score": int(player_scores.get(2, 0)),
+            "scores": {str(k): int(v) for k, v in player_scores.items()},
             "armies_to_place": env.armies_to_place,
             "action_log": action_log[-30:],
             "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
@@ -251,8 +196,6 @@ async def ws_game_handler(
                 "message": reason_msg,
                 "scores": {str(k): int(v) for k, v in player_scores.items()},
                 "player_stats": build_player_stats(),
-                "p1_score": int(player_scores.get(1, 0)),
-                "p2_score": int(player_scores.get(2, 0)),
             }
         )
         game_over = True
@@ -264,20 +207,20 @@ async def ws_game_handler(
             return
 
         pending_sample = None
+        current_phase_at_start = env.current_phase
         if (
             mode == "PLAY"
             and player_map.get(player_id, {}).get("type") == "HUMAN"
             and Config.HUMAN_DATA.get("ENABLED", False)
-            and env.current_phase != "INITIAL_PLACEMENT"
         ):
             state = processor.encode_state(
                 env.board,
                 current_player_id=player_id,
                 current_turn=env.current_turn,
-                current_phase=env.current_phase,
+                current_phase=current_phase_at_start,
                 mission_data=mission,
             )
-            target = encode_action_target(env.board, player_id, env.current_phase, action)
+            target = encode_action_target(env.board, player_id, current_phase_at_start, action)
             if target is not None:
                 pending_sample = {
                     "state": state.tolist(),
@@ -299,9 +242,7 @@ async def ws_game_handler(
         }
 
         if pending_sample and "error" not in info:
-            winner_check, _ = env.is_game_over()
-            if reward > 0 or winner_check == player_id:
-                append_sample(pending_sample, Config.HUMAN_DATA["DATASET_PATH"])
+            append_sample(pending_sample, Config.HUMAN_DATA["DATASET_PATH"])
 
         player_scores[player_id] = int(player_scores.get(player_id, 0) + reward)
 
@@ -474,11 +415,8 @@ async def ws_game_handler(
                 "phase": env.current_phase,
                 "turn": env.current_turn,
                 "player_missions": player_missions,
-                "p1_mission": player_missions.get("1", ""),
-                "p2_mission": player_missions.get("2", ""),
                 "armies_to_place": env.armies_to_place,
-                "p1_score": int(player_scores.get(1, 0)),
-                "p2_score": int(player_scores.get(2, 0)),
+                "scores": {str(k): int(v) for k, v in player_scores.items()},
                 "max_turns": Config.GAME["MAX_TURNS"],
                 "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
             }

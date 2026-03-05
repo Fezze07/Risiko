@@ -10,7 +10,7 @@ TERRITORIES: Dict[int, Dict] = {
     # ------------------------------
     0:  {"name": "Alaska", "continent": "NORTH_AMERICA", "neighbors": [1, 3, 29]},
     1:  {"name": "Northwest Territory", "continent": "NORTH_AMERICA", "neighbors": [0, 3, 4, 2]},
-    2:  {"name": "Greenland", "continent": "NORTH_AMERICA", "neighbors": [1, 4, 5, 14]},
+    2:  {"name": "Greenland", "continent": "NORTH_AMERICA", "neighbors": [1, 4, 5, 13]},
     3:  {"name": "Alberta", "continent": "NORTH_AMERICA", "neighbors": [0, 1, 4, 6]},
     4:  {"name": "Ontario", "continent": "NORTH_AMERICA", "neighbors": [1, 3, 6, 7, 5, 2]},
     5:  {"name": "Quebec", "continent": "NORTH_AMERICA", "neighbors": [4, 7, 2]},
@@ -23,7 +23,7 @@ TERRITORIES: Dict[int, Dict] = {
     # ------------------------------
     9:  {"name": "Venezuela", "continent": "SOUTH_AMERICA", "neighbors": [8, 10, 11]},
     10: {"name": "Peru", "continent": "SOUTH_AMERICA", "neighbors": [9, 11, 12]},
-    11: {"name": "Brazil", "continent": "SOUTH_AMERICA", "neighbors": [9, 10, 12, 21]},
+    11: {"name": "Brazil", "continent": "SOUTH_AMERICA", "neighbors": [9, 10, 12, 20]},
     12: {"name": "Argentina", "continent": "SOUTH_AMERICA", "neighbors": [10, 11]},
 
     # ------------------------------
@@ -33,16 +33,16 @@ TERRITORIES: Dict[int, Dict] = {
     14: {"name": "Great Britain", "continent": "EUROPE", "neighbors": [13, 15, 16, 17]},
     15: {"name": "Scandinavia", "continent": "EUROPE", "neighbors": [13, 14, 16, 19]},
     16: {"name": "Northern Europe", "continent": "EUROPE", "neighbors": [14, 15, 19, 18, 17]},
-    17: {"name": "Western Europe", "continent": "EUROPE", "neighbors": [14, 16, 18, 21]},
-    18: {"name": "Southern Europe", "continent": "EUROPE", "neighbors": [16, 19, 35, 22, 21, 17]},
-    19: {"name": "Ukraine", "continent": "EUROPE", "neighbors": [15, 16, 18, 35, 34, 27]},
+    17: {"name": "Western Europe", "continent": "EUROPE", "neighbors": [14, 16, 18, 20]},
+    18: {"name": "Southern Europe", "continent": "EUROPE", "neighbors": [16, 19, 35, 21, 17, 20]},
+    19: {"name": "Ukraine", "continent": "EUROPE", "neighbors": [15, 16, 18, 35, 34, 26]},
 
     # ------------------------------
     # AFRICA (20 - 25)
     # ------------------------------
     20: {"name": "North Africa", "continent": "AFRICA", "neighbors": [11, 17, 18, 22, 23, 21]},
-    21: {"name": "Egypt", "continent": "AFRICA", "neighbors": [20, 18, 35, 23]},
-    22: {"name": "East Africa", "continent": "AFRICA", "neighbors": [21, 20, 23, 24, 25, 35]},
+    21: {"name": "Egypt", "continent": "AFRICA", "neighbors": [20, 18, 35, 22]},
+    22: {"name": "East Africa", "continent": "AFRICA", "neighbors": [21, 20, 23, 24, 25]},
     23: {"name": "Congo", "continent": "AFRICA", "neighbors": [20, 22, 24]},
     24: {"name": "South Africa", "continent": "AFRICA", "neighbors": [23, 22, 25]},
     25: {"name": "Madagascar", "continent": "AFRICA", "neighbors": [24, 22]},
@@ -59,7 +59,7 @@ TERRITORIES: Dict[int, Dict] = {
     32: {"name": "China", "continent": "ASIA", "neighbors": [26, 27, 31, 33, 36, 34]},
     33: {"name": "Japan", "continent": "ASIA", "neighbors": [29, 31]},
     34: {"name": "Afghanistan", "continent": "ASIA", "neighbors": [19, 26, 32, 35, 36]},
-    35: {"name": "Middle East", "continent": "ASIA", "neighbors": [18, 19, 34, 36, 21, 22]},
+    35: {"name": "Middle East", "continent": "ASIA", "neighbors": [18, 19, 34, 36, 21]},
     36: {"name": "India", "continent": "ASIA", "neighbors": [35, 34, 32, 37]},
     37: {"name": "Siam", "continent": "ASIA", "neighbors": [36, 32, 38]},
 

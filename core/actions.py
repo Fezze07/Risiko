@@ -57,20 +57,15 @@ class ActionHandler:
         stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
         armies_before = t_dest.armies - to_add
         if stack_threshold and armies_before >= stack_threshold:
-            # Controlla se il giocatore ha territori NON saturi
             has_alternative = any(
                 t.owner_id == player_id and t.armies < stack_threshold
                 for t in board.territories.values()
             )
-            
             excess = t_dest.armies - stack_threshold
             penalty = Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
-            
-            # Se NON ha alternative, la penalità è dimezzata
             if not has_alternative:
                 penalty = int(penalty * 0.2)
                 extra_info['inevitable_stacking'] = True
-            
             reward += penalty
             extra_info['stack_penalty'] = True
             extra_info['stack_excess'] = excess
@@ -124,23 +119,34 @@ class ActionHandler:
             reward += Config.REWARD['AVOID_RISK_BONUS']
             extra_info['avoid_risk'] = True
 
-        if t_att.armies <= t_def.armies and not extra_info.get('risky_attack'):
+        if t_att.armies * Config.GAME.get('RISK_RATIO', 2.0) < t_def.armies and not extra_info.get('risky_attack'):
             reward += Config.REWARD['ATTACK_RISK_PENALTY']
             extra_info['risky_attack'] = True
             extra_info['risky_attack_odds'] = True
+
         if t_def.armies <= 0:
             conquered = True
+            old_owner = defender_id
             t_def.owner_id = player_id
             t_def.armies = 0
-            
+            extra_info['conquered'] = True
+
+            # Penalità per il difensore: ha perso un territorio
+            opponent_reward += Config.REWARD.get('LOSE_TERRITORY', -300)
+
+            # Controlla se l'attaccante ha completato un continente
             for c_name, data in Config.CONTINENTS.items():
                 if t_def.id in data['t_ids']:
                     if all(board.territories[tid].owner_id == player_id for tid in data['t_ids']):
                         extra_info['continent_complete'] = True
-            
+
+            # Controlla se il difensore ha perso un continente che possedeva
             for c_name, data in Config.CONTINENTS.items():
                 if t_def.id in data['t_ids']:
-                    pass
+                    other_ids = [tid for tid in data['t_ids'] if tid != t_def.id]
+                    if other_ids and all(board.territories[tid].owner_id == old_owner for tid in other_ids):
+                        opponent_reward += Config.REWARD.get('LOSE_CONTINENT', -2000)
+                        extra_info['continent_lost'] = True
         else:
             opponent_reward += Config.REWARD.get('DEFEND_HOLD_TERRITORY', 0)
             extra_info['defend_hold'] = True
@@ -162,51 +168,78 @@ class ActionHandler:
         t_src = board.territories[src_id]
         t_dest = board.territories[dest_id]
         
-        # Minimo 1 o quanto richiesto dal config
         movable = t_src.armies - 1
         min_move = min(movable, max(1, Config.GAME.get("MIN_POST_CONQUEST_MOVE", 1)))
         
-        # Quante ne sposta effettivamente l'IA (qty è tra 0 e 1)
         amount_ratio = qty
         amount = min_move + int((movable - min_move) * amount_ratio)
         
         reward = 0
         extra_info: Dict[str, Any] = {}
         
-        # Se spostando tutto lasciamo solo 1 armata in un territorio che è ancora sul fronte,
-        # e avevamo truppe a sufficienza, forziamo il mantenimento di un presidio (es. 2-3 armate).
-        src_still_frontline = self._has_enemy_neighbors(board, player_id, src_id)
-        if src_still_frontline and t_src.armies > 2:
-            # Vogliamo tenere almeno 2 armate nella sorgente se possibile
-            safe_to_move = max(min_move, t_src.armies - 2)
-            if amount > safe_to_move:
-                amount = safe_to_move
-                reward += Config.REWARD.get('AVOID_RISK_BONUS', 0)
-                extra_info['heuristic_safe_move'] = True
+        # --- Heuristic di Bilanciamento ---
+        ratio = Config.GAME.get('RISK_RATIO', 2.0)
         
-        amount = max(min_move, min(amount, movable))
+        # Calcolo minacce
+        enemies_src = [n for n in t_src.neighbors if board.territories[n].owner_id != player_id]
+        enemies_dest = [n for n in t_dest.neighbors if board.territories[n].owner_id != player_id]
+        
+        max_threat_src = max((board.territories[n].armies for n in enemies_src), default=0)
+        max_threat_dest = max((board.territories[n].armies for n in enemies_dest), default=0)
+        
+        # Quante truppe servirebbero per stare "sicuri" (ratio)
+        needed_src = int(max_threat_src / ratio) if enemies_src else 0
+        needed_dest = int(max_threat_dest / ratio) if enemies_dest else 0
+        
+        # Le truppe totali che abbiamo a disposizione sono (t_src.armies - 1) + 0 (t_dest.armies è 0 all'inizio della conquista)
+        total_available = t_src.armies
+        
+        # Dobbiamo lasciare almeno 1 in src e muovere almeno min_move in dest
+        movable_pool = total_available - 1
+        
+        if needed_src + needed_dest > 0:
+            # Distribuzione proporzionale alla minaccia
+            weight_dest = needed_dest / (needed_src + needed_dest)
+            suggested_move = int(movable_pool * weight_dest)
+        else:
+            # Nessuna minaccia immediata: seguiamo il desiderio dell'AI (qty)
+            suggested_move = min_move + int((movable_pool - min_move) * qty)
+
+        # Applichiamo i limiti di gioco
+        amount = max(min_move, min(suggested_move, movable_pool))
+        
+        # Se l'AI ha chiesto esplicitamente una quantità diversa (qty), 
+        # premiamo se si avvicina al nostro suggerimento di sicurezza
+        if abs(amount - (min_move + int((movable_pool - min_move) * qty))) < 2:
+            reward += Config.REWARD.get('AVOID_RISK_BONUS', 10)
+            extra_info['balanced_move'] = True
+
         extra_info['post_attack_move_qty'] = amount
+        extra_info['max_threat_src'] = max_threat_src
+        extra_info['max_threat_dest'] = max_threat_dest
         
         t_src.armies -= amount
         t_dest.armies += amount
         
-        # Check se il nuovo territorio è rischioso
-        enemies = [n for n in t_dest.neighbors if board.territories[n].owner_id != player_id]
-        if enemies:
-            max_threat = max((board.territories[n].armies for n in enemies), default=0)
-            if max_threat >= t_dest.armies:
-                reward += Config.REWARD.get('POST_ATTACK_RISK_PENALTY', Config.REWARD['ATTACK_RISK_PENALTY'])
-                extra_info['risky_attack_conquer'] = True
-        else:
-            reward += Config.REWARD['AVOID_RISK_BONUS']
+        # Penalità se dopo lo spostamento siamo comunque scoperti
+        if enemies_dest and max_threat_dest > t_dest.armies * ratio:
+            reward += Config.REWARD.get('POST_ATTACK_RISK_PENALTY', -140)
+            extra_info['risky_attack_conquer'] = True
+            
+        if enemies_src and max_threat_src > t_src.armies * ratio:
+            reward += Config.REWARD.get('POST_ATTACK_RISK_PENALTY', -140)
+            extra_info['risky_src_left_vulnerable'] = True
+
+        if not enemies_dest and not enemies_src:
+            reward += Config.REWARD.get('AVOID_RISK_BONUS', 35)
             extra_info['avoid_risk'] = True
 
-        if t_src.armies == 1 and self._has_enemy_neighbors(board, player_id, t_src.id):
-            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', Config.REWARD['LEAVE_ONE_ARMY_PENALTY'])
+        if t_src.armies == 1 and enemies_src:
+            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', -300)
             extra_info['left_one_army_src'] = True
             
-        if t_dest.armies == 1 and enemies:
-            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', Config.REWARD['LEAVE_ONE_ARMY_PENALTY'])
+        if t_dest.armies == 1 and enemies_dest:
+            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', -300)
             extra_info['left_one_army_dest'] = True
 
         return reward, extra_info
@@ -238,7 +271,6 @@ class ActionHandler:
         }
 
         if dest_is_frontline:
-            # Spostamento verso il fronte: premiato solo se non andiamo in over-stacking
             stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
             armies_before = t_dest.armies - amount
             is_stacked_before = stack_threshold and armies_before >= stack_threshold
@@ -247,7 +279,6 @@ class ActionHandler:
                 reward = Config.REWARD['MANEUVER_STRATEGIC']
                 extra_info['maneuver_strategic'] = True
             else:
-                # Se era già pieno e aggiungiamo ancora, niente bonus e applichiamo malus progressivo
                 reward = Config.REWARD['MANEUVER_PENALTY']
                 extra_info['maneuver_strategic_stacked'] = True
                 excess = t_dest.armies - stack_threshold
@@ -255,15 +286,12 @@ class ActionHandler:
                 extra_info['stack_penalty'] = True
                 extra_info['stack_excess'] = excess
         elif not src_is_frontline:
-            # Safe -> Safe: Inutile spostamento interno
             reward = Config.REWARD['REINFORCE_ARMY']
             extra_info['maneuver_safe_to_safe'] = True
         else:
-            # Front -> Safe: Mossa sbagliata (ritirata non necessaria), penalità
             reward = Config.REWARD['MANEUVER_PENALTY']
             extra_info['maneuver_away_from_front'] = True
 
-        # Penalizza solo se dopo lo spostamento il territorio sorgente rimane a fronte
         if t_src.armies == 1 and self._has_enemy_neighbors(board, player_id, t_src.id):
             reward += Config.REWARD['LEAVE_ONE_ARMY_PENALTY']
             extra_info['left_one_army_src'] = True
@@ -281,4 +309,3 @@ class ActionHandler:
         if armies > 3:
             return 3
         return armies - 1
-
