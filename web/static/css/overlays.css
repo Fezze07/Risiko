@@ -62,6 +62,16 @@
 }
 
 /* Modals */
+#battle-modal.modal-overlay {
+    background: transparent;
+    backdrop-filter: none;
+    justify-content: flex-start;
+    align-items: flex-end;
+    padding: 40px;
+    pointer-events: all;
+    /* Keep it blocking */
+}
+
 .modal-overlay {
     position: fixed;
     top: 0;
@@ -133,11 +143,11 @@
 
 /* Battle Modal Specifics */
 .battle-modal-content {
-    max-width: 600px;
-    width: 90%;
+    width: 450px;
     background: rgba(5, 5, 16, 0.95);
     border: 2px solid var(--primary-blue);
     box-shadow: 0 0 50px rgba(37, 140, 244, 0.3), inset 0 0 20px rgba(37, 140, 244, 0.1);
+    margin: 0;
 }
 
 .battle-title {
@@ -476,6 +486,8 @@
     background: rgba(5, 10, 32, 0.9);
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    position: relative;
+    z-index: 1010; /* Above modals */
 }
 
 .control-btn {

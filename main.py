@@ -117,6 +117,11 @@ class Main:
             
             post_move_risky = 0
             post_move_count = 0
+            
+            max_chain_attacks = 0
+            total_territories_captured = 0
+            total_frontline_weakness = 0
+            total_end_phase_evals = 0
 
             for res_idx, (fitness_scores, stats) in enumerate(results):
                 player_indices = match_tasks_data[res_idx][1]
@@ -140,6 +145,11 @@ class Main:
                 
                 post_move_risky += stats.get('post_move_risky', 0)
                 post_move_count += stats.get('post_move_count', 0)
+                
+                max_chain_attacks = max(max_chain_attacks, stats.get('consecutive_attacks_max', 0))
+                total_territories_captured += stats.get('territories_captured', 0)
+                total_frontline_weakness += stats.get('frontline_weakness_penalties', 0)
+                total_end_phase_evals += stats.get('end_phase_eval_count', 0)
 
             # Normalizzazione fitness per il numero di match giocati
             for agent in population:
@@ -159,8 +169,8 @@ class Main:
             avg_fitness = sum(a.fitness for a in population) / len(population)
 
             post_move_risky_pct = 0.0
-            if post_move_count > 0:
-                post_move_risky_pct = (post_move_risky / post_move_count) * 100
+            if total_end_phase_evals > 0:
+                post_move_risky_pct = (post_move_risky / total_end_phase_evals) * 100
 
             reinforce_avg = 0.0
             attack_avg = 0.0
@@ -201,7 +211,9 @@ class Main:
                 f"| PostAttack avg: {post_attack_avg:.2f} | Maneuver avg: {maneuver_avg:.2f} \n"
                 f"| Pass: {pass_pct:.1f}% | Rein: {reinforce_pct:.1f}% | Att: {attack_pct:.1f}% "
                 f"| Post: {post_attack_pct:.1f}% | Man: {maneuver_pct:.1f}%\n"
+                f"| Chains Max: {max_chain_attacks} | Conq: {total_territories_captured} | FrontWeak: {total_frontline_weakness}\n"
             )
+
 
             self.evo_manager.evolve()
             generation += 1

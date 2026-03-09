@@ -90,7 +90,10 @@ class ActionValidator:
             return False, "Armate insufficienti per spostare (serve > 1)"
         
         # Check quantità
-        amount = int((t_src.armies - 1) * action.get('qty', 0.0))
+        movable = t_src.armies - 1
+        amount = max(1, int(movable * action.get('qty', 0.0)))
+        amount = min(amount, movable)
+        
         if amount < 1:
             return False, "Quantità da spostare insufficiente (< 1)"
             

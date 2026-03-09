@@ -82,6 +82,7 @@ class RisikoEnvironment:
         self.repeat_pass = {p_id: 0 for p_id in self._player_ids()}
         self.consecutive_passive_turns = {p_id: 0 for p_id in self._player_ids()}
         self.has_attacked_this_turn = False
+        self.attacked_territories_this_turn: set = set()
         # Initialize progress cache with first state
         for p_id in self._player_ids():
             self._get_progress_reward(p_id, {})
@@ -128,8 +129,12 @@ class RisikoEnvironment:
                     pass_penalty = max(pass_penalty, -10000)
                     reward += pass_penalty
                     info['passive_turn_penalty'] = pass_penalty
-                else:
-                    self.consecutive_passive_turns[player_id] = 0
+                
+                # Al termine della fase di attacco valutiamo la sicurezza della frontline
+                sec_reward, sec_info = self._evaluate_frontline_security(player_id)
+                reward += sec_reward
+                info.update(sec_info)
+                
                 self.current_phase, self.conquest_streak = 'MANEUVER', 0
             elif self.current_phase == 'MANEUVER':
                 self.repeat_pass[player_id] += 1
@@ -174,9 +179,13 @@ class RisikoEnvironment:
             reward += a_r
             if o_r != 0: info['opponent_reward'] = o_r
             info.update(a_e)
+            # Tracciamo src e dest di ogni attacco per la valutazione finale
+            self.attacked_territories_this_turn.add(action['src'])
+            self.attacked_territories_this_turn.add(action['dest'])
             if conquered:
                 self.conquest_streak += 1
-                reward += Config.REWARD.get('CONQUER_TERRITORY', 120) * min(self.conquest_streak, Config.REWARD.get('CONQUEST_STREAK_CAP', 3))
+                streak_mult = 1.0 + 0.5 * min(self.conquest_streak - 1, 2)
+                reward += int(Config.REWARD.get('CONQUER_TERRITORY', 300) * streak_mult)
                 if a_e.get('continent_complete'): reward += Config.REWARD.get('CONQUER_CONTINENT', 150)
                 self.pending_attack_src, self.pending_attack_dest = action['src'], action['dest']
                 self.current_phase, info['post_attack_move_required'] = 'POST_ATTACK_MOVE', True
@@ -199,6 +208,13 @@ class RisikoEnvironment:
 
         # --- ACTION: MANEUVER ---
         elif self.current_phase == 'MANEUVER':
+            # Assicuriamoci che se l'IA decide di manovrare, sposti almeno 1 armata
+            t_src = self.board.territories.get(action.get('src'))
+            if t_src and t_src.armies > 1:
+                movable = t_src.armies - 1
+                if action.get('qty', 0.0) * movable < 1.0:
+                    action['qty'] = 1.0 / movable if movable > 0 else 0.0
+            
             is_valid, err_msg = ActionValidator.validate_maneuver(self.board, player_id, action, self.max_armies)
             if not is_valid: return self._handle_invalid_move(err_msg, info)
             self.repeat_pass[player_id], self.consecutive_invalid_moves = 0, 0
@@ -216,6 +232,7 @@ class RisikoEnvironment:
 
     def _finalize_step(self, reward: int, done: bool, info: Dict[str, Any], player_id: int, action: Dict[str, Any]) -> Tuple[int, bool, Dict[str, Any]]:
         reward += self._get_safe_action_bonus(action, info)
+        reward += self._get_inactive_army_penalty(player_id, info)
         reward += self._get_progress_reward(player_id, info)
         lp = Config.REWARD.get('GAME_LENGTH_PENALTY', -10)
         is_attack_action = action.get('type') == 'ATTACK'
@@ -250,6 +267,48 @@ class RisikoEnvironment:
             return reward, False, info
         return reward, False, {'error': err_msg}
 
+    def _evaluate_frontline_security(self, player_id: int) -> Tuple[int, Dict[str, Any]]:
+        reward = 0
+        info: Dict[str, Any] = {
+            'end_phase_frontline_weakness': 0,
+            'end_phase_left_one': 0,
+            'end_phase_risky': 0
+        }
+        
+        if not self.attacked_territories_this_turn:
+            return reward, info
+        
+        ratio = Config.GAME.get('RISK_RATIO', 2.0)
+        # Valutiamo SOLO i territori coinvolti negli attacchi di questo turno
+        involved_ids = self.attacked_territories_this_turn
+        frontline = [
+            t for t_id, t in self.board.territories.items()
+            if t_id in involved_ids
+            and t.owner_id == player_id
+            and any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
+        ]
+        
+        for t in frontline:
+            enemies = [n for n in t.neighbors if self.board.territories[n].owner_id != player_id]
+            max_threat = max((self.board.territories[n].armies for n in enemies), default=0)
+            
+            if t.armies == 1:
+                pen = Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -800)
+                reward += pen
+                info['end_phase_left_one'] += 1
+                info['end_phase_frontline_weakness'] += abs(pen)
+            
+            if max_threat > t.armies * ratio:
+                pen = Config.REWARD.get('END_PHASE_RISK_PENALTY', -50)
+                reward += pen
+                info['end_phase_risky'] += 1
+                info['end_phase_frontline_weakness'] += abs(pen)
+        
+        cap = Config.REWARD.get('END_PHASE_PENALTY_CAP', -2000)
+        reward = max(reward, cap)
+                
+        return reward, info
+
     def _get_frontline_stability_reward(self, player_id: int, info: Dict[str, Any]) -> int:
         frontline = [t for t in self.board.territories.values() if t.owner_id == player_id and any(self.board.territories[n].owner_id != player_id for n in t.neighbors)]
         if not frontline: return 0
@@ -271,6 +330,24 @@ class RisikoEnvironment:
         if a_type == 'REINFORCE' and info.get('is_frontline'): return 0
         info['safe_action_bonus'] = True
         return Config.REWARD.get('VALID_SAFE_ACTION_BONUS', 0)
+
+    def _get_inactive_army_penalty(self, player_id: int, info: Dict[str, Any]) -> int:
+        penalty_per_army = Config.REWARD.get('INTERNAL_ARMY_PENALTY', -15)
+        total_penalty = 0
+        inactive_count = 0
+        
+        for t_id, t in self.board.territories.items():
+            if t.owner_id == player_id:
+                is_frontline = any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
+                if not is_frontline and t.armies > 1:
+                    inactive_armies = t.armies - 1
+                    total_penalty += inactive_armies * penalty_per_army
+                    inactive_count += inactive_armies
+        
+        if total_penalty != 0:
+            info['inactive_army_penalty'] = total_penalty
+            info['inactive_army_count'] = inactive_count
+        return total_penalty
 
     def _get_progress_reward(self, player_id: int, info: Dict[str, Any]) -> int:
         if 'error' in info: return 0
@@ -307,6 +384,7 @@ class RisikoEnvironment:
 
     def _end_turn(self) -> None:
         self.has_attacked_this_turn = False
+        self.attacked_territories_this_turn = set()
         self.has_reinforced, self.armies_to_place = False, 0
         self.repeat_reinforce = {p_id: {"last": None, "count": 0} for p_id in self._player_ids()}
         if hasattr(self, '_continent_reward_given'): del self._continent_reward_given

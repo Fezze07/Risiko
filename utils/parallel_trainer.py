@@ -18,6 +18,13 @@ def _init_phase_stats() -> Dict[str, int]:
         stats[f'{key}_reward_sum'] = 0
     stats['pass_count'] = 0
     stats['total_actions'] = 0
+    
+    # New Offensive Metrics
+    stats['consecutive_attacks_max'] = 0
+    stats['territories_captured'] = 0
+    stats['frontline_weakness_penalties'] = 0
+    stats['end_phase_eval_count'] = 0
+    
     return stats
 
 
@@ -60,8 +67,18 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, int], Dict[str,
 
         if action.get('type') == 'POST_ATTACK_MOVE' and 'post_attack_move_qty' in info:
             stats['post_move_count'] += 1
-            if info.get('risky_attack_conquer') or info.get('left_one_army_src') or info.get('left_one_army_dest'):
+        
+        if 'end_phase_frontline_weakness' in info:
+            stats['end_phase_eval_count'] += 1
+            if info.get('end_phase_risky', 0) > 0 or info.get('end_phase_left_one', 0) > 0:
                 stats['post_move_risky'] += 1
+
+        if action_type == 'attack' and info.get('conquered'):
+            stats['consecutive_attacks_max'] = max(stats['consecutive_attacks_max'], env.conquest_streak)
+            stats['territories_captured'] += 1
+
+        if 'end_phase_frontline_weakness' in info:
+            stats['frontline_weakness_penalties'] += info['end_phase_frontline_weakness']
 
         if 'error' in info:
             consecutive_errors[curr_p] += 1

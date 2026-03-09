@@ -18,10 +18,10 @@ class WatchMatchUtils:
             if info.get('continent_held'):
                 reasons.append('Bonus continente')
             
-            if info.get('is_frontline'):
-                reasons.append('Rinforzo strategico')
-            else:
-                reasons.append('Rinforzo sicuro')
+            if info.get('continent_held'):
+                reasons.append('Bonus continente')
+            
+            if not info.get('is_frontline'):
                 if info.get('safe_action_bonus'):
                     reasons.append('Bonus azione sicura')
                 if info.get('reinforce_safe_penalty'):

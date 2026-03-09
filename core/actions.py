@@ -44,17 +44,15 @@ class ActionHandler:
         )
 
         extra_info = {'is_frontline': is_frontline, 'reinforce_qty': to_add}
+        reward = 0
 
-        if is_frontline:
-            reward = to_add * Config.REWARD['REINFORCE_STRATEGIC_MULT']
-        else:
-            reward = to_add * Config.REWARD['REINFORCE_SAFE_MULT']
+        if not is_frontline:
             if has_frontline_any:
                 reward += Config.REWARD.get('REINFORCE_SAFE_PENALTY', -50)
                 extra_info['reinforce_safe_penalty'] = True
 
-        # Smart Stacking: penalizza pesantemente solo se hai alternative non sature
-        stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
+        # Smart Stacking Reward
+        stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 12)
         armies_before = t_dest.armies - to_add
         if stack_threshold and armies_before >= stack_threshold:
             has_alternative = any(
@@ -62,7 +60,7 @@ class ActionHandler:
                 for t in board.territories.values()
             )
             excess = t_dest.armies - stack_threshold
-            penalty = Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
+            penalty = Config.REWARD.get('REINFORCE_STACK_PENALTY', -25) * excess
             if not has_alternative:
                 penalty = int(penalty * 0.2)
                 extra_info['inevitable_stacking'] = True
@@ -151,10 +149,6 @@ class ActionHandler:
             opponent_reward += Config.REWARD.get('DEFEND_HOLD_TERRITORY', 0)
             extra_info['defend_hold'] = True
 
-        if t_att.armies == 1 and self._has_enemy_neighbors(board, player_id, t_att.id):
-            reward += Config.REWARD['LEAVE_ONE_ARMY_PENALTY']
-            extra_info['left_one_army_src'] = True
-
         return reward, conquered, opponent_reward, extra_info
 
     def execute_post_attack_move(
@@ -197,22 +191,21 @@ class ActionHandler:
         # Dobbiamo lasciare almeno 1 in src e muovere almeno min_move in dest
         movable_pool = total_available - 1
         
+        # Calcoliamo la quantità desiderata dall'IA/Giocatore
+        intent_amount = min_move + int((movable_pool - min_move) * qty)
+        
         if needed_src + needed_dest > 0:
             # Distribuzione proporzionale alla minaccia
             weight_dest = needed_dest / (needed_src + needed_dest)
             suggested_move = int(movable_pool * weight_dest)
-        else:
-            # Nessuna minaccia immediata: seguiamo il desiderio dell'AI (qty)
-            suggested_move = min_move + int((movable_pool - min_move) * qty)
-
-        # Applichiamo i limiti di gioco
-        amount = max(min_move, min(suggested_move, movable_pool))
+            
+            # Se l'intento si avvicina al suggerimento di sicurezza (+/- 1), diamo un bonus
+            if abs(suggested_move - intent_amount) <= 1:
+                reward += Config.REWARD.get('AVOID_RISK_BONUS', 10)
+                extra_info['balanced_move'] = True
         
-        # Se l'AI ha chiesto esplicitamente una quantità diversa (qty), 
-        # premiamo se si avvicina al nostro suggerimento di sicurezza
-        if abs(amount - (min_move + int((movable_pool - min_move) * qty))) < 2:
-            reward += Config.REWARD.get('AVOID_RISK_BONUS', 10)
-            extra_info['balanced_move'] = True
+        # Ora usiamo SEMPRE l'intento originale, limitato solo dai pool reali
+        amount = max(min_move, min(intent_amount, movable_pool))
 
         extra_info['post_attack_move_qty'] = amount
         extra_info['max_threat_src'] = max_threat_src
@@ -221,26 +214,9 @@ class ActionHandler:
         t_src.armies -= amount
         t_dest.armies += amount
         
-        # Penalità se dopo lo spostamento siamo comunque scoperti
-        if enemies_dest and max_threat_dest > t_dest.armies * ratio:
-            reward += Config.REWARD.get('POST_ATTACK_RISK_PENALTY', -140)
-            extra_info['risky_attack_conquer'] = True
-            
-        if enemies_src and max_threat_src > t_src.armies * ratio:
-            reward += Config.REWARD.get('POST_ATTACK_RISK_PENALTY', -140)
-            extra_info['risky_src_left_vulnerable'] = True
-
         if not enemies_dest and not enemies_src:
             reward += Config.REWARD.get('AVOID_RISK_BONUS', 35)
             extra_info['avoid_risk'] = True
-
-        if t_src.armies == 1 and enemies_src:
-            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', -300)
-            extra_info['left_one_army_src'] = True
-            
-        if t_dest.armies == 1 and enemies_dest:
-            reward += Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', -300)
-            extra_info['left_one_army_dest'] = True
 
         return reward, extra_info
 
@@ -270,7 +246,17 @@ class ActionHandler:
             'maneuver_qty': amount
         }
 
+        reward = 0
+        # Bonus per svuotamento retrovia (se src non era il fronte)
+        if not src_is_frontline:
+            reward += Config.REWARD.get('MANEUVER_FROM_SAFE_ZONE', 40)
+            extra_info['cleared_safe_zone'] = True
+
         if dest_is_frontline:
+            # Bonus strategico: portiamo truppe al fronte
+            reward += Config.REWARD.get('MANEUVER_STRATEGIC', 80)
+            extra_info['strategic_move'] = True
+            
             stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
             armies_before = t_dest.armies - amount
             is_stacked_before = stack_threshold and armies_before >= stack_threshold
@@ -286,15 +272,11 @@ class ActionHandler:
                 extra_info['stack_penalty'] = True
                 extra_info['stack_excess'] = excess
         elif not src_is_frontline:
-            reward = Config.REWARD['REINFORCE_ARMY']
+            reward = Config.REWARD.get('MANEUVER_CORRECTLY', 10)
             extra_info['maneuver_safe_to_safe'] = True
         else:
             reward = Config.REWARD['MANEUVER_PENALTY']
             extra_info['maneuver_away_from_front'] = True
-
-        if t_src.armies == 1 and self._has_enemy_neighbors(board, player_id, t_src.id):
-            reward += Config.REWARD['LEAVE_ONE_ARMY_PENALTY']
-            extra_info['left_one_army_src'] = True
 
         return reward, extra_info
 
