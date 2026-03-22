@@ -1,0 +1,187 @@
+/* CARDS SYSTEM CSS */
+
+:root {
+    --card-bg: rgba(20, 20, 35, 0.85);
+    --card-border: rgba(0, 243, 255, 0.3);
+    --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+    --card-selected: #00f3ff;
+    --card-jolly: linear-gradient(135deg, #ff00ff, #00f3ff);
+}
+
+.card-panel {
+    position: fixed;
+    bottom: 20px;
+    right: 320px; /* Offset for right panel */
+    width: auto;
+    max-width: 600px;
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--card-border);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: var(--card-shadow);
+    z-index: 100;
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.card-panel.hidden {
+    transform: translateY(120%) scale(0.9);
+    opacity: 0;
+    pointer-events: none;
+}
+
+.panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding-bottom: 8px;
+}
+
+.panel-header h3 {
+    margin: 0;
+    font-size: 0.9rem;
+    letter-spacing: 2px;
+    color: var(--text-accent);
+}
+
+.cards-container {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 10px 5px;
+    min-height: 140px;
+}
+
+/* SCROLLBAR */
+.cards-container::-webkit-scrollbar { height: 4px; }
+.cards-container::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 10px; }
+
+.card-item {
+    min-width: 90px;
+    width: 90px;
+    height: 130px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.3s;
+    position: relative;
+    user-select: none;
+    animation: cardEntrance 0.5s ease-out forwards;
+}
+
+@keyframes cardEntrance {
+    from { opacity: 0; transform: translateY(20px) rotate(-5deg); }
+    to { opacity: 1; transform: translateY(0) rotate(0); }
+}
+
+.card-item:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-5px);
+    border-color: var(--card-selected);
+}
+
+.card-item.selected {
+    border: 2px solid var(--card-selected);
+    background: rgba(0, 243, 255, 0.15);
+    box-shadow: 0 0 15px rgba(0, 243, 255, 0.4);
+}
+
+.card-item.jolly {
+    background: var(--card-jolly);
+    border-color: transparent;
+    color: white;
+}
+
+.card-symbol {
+    font-size: 1.8rem;
+    margin-top: 10px;
+}
+
+.card-territory {
+    font-size: 0.65rem;
+    text-align: center;
+    text-transform: uppercase;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.card-ownership-badge {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #4caf50;
+    color: white;
+    font-size: 0.6rem;
+    padding: 2px 6px;
+    border-radius: 10px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+}
+
+.card-combo-preview {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border: 1px dashed rgba(255, 255, 255, 0.1);
+}
+
+.preview-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.preview-bonus {
+    color: #ffd700;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.preview-territories {
+    font-size: 0.7rem;
+    color: #4caf50;
+}
+
+.trade-btn {
+    padding: 8px 24px;
+    background: #00f3ff;
+    color: black;
+    border: none;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    transition: all 0.2s;
+}
+
+.trade-btn:disabled {
+    background: #444;
+    color: #888;
+    cursor: not-allowed;
+}
+
+.trade-btn:not(:disabled):hover {
+    box-shadow: 0 0 15px #00f3ff;
+    transform: scale(1.05);
+}
+
+/* MOBILE ADAPTATION */
+@media (max-width: 1200px) {
+    .card-panel {
+        right: 20px;
+        left: 20px;
+        max-width: none;
+    }
+}

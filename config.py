@@ -6,8 +6,8 @@ class Config:
     # =========================================
     GAME: Dict[str, Any] = {
         "NUM_TERRITORIES": 42,
-        "MAX_TURNS": 250,
-        "NUM_PLAYERS": 8,
+        "MAX_TURNS": 300,
+        "NUM_PLAYERS": 5,
         "INITIAL_PLACEMENT_ARMIES_PER_TERRITORY": 1.5,
         "INITIAL_PLACEMENT_STEP_DIVISOR": 4,
         "MAX_ARMIES_PER_TERRITORY": 30,
@@ -72,7 +72,7 @@ class Config:
     # =========================================
     EVOLUTION: Dict[str, Any] = {
         "POPULATION_SIZE": 100,       # Quanti agenti per generazione
-        "GENERATIONS": 500,          # Quante epoche di evoluzione
+        "GENERATIONS": 1000000,       # Quante epoche di evoluzione
         "ELITISM_COUNT": 20,          # I top 20 passano alla prossima gen senza modifiche (immortali)
         "TOURNAMENT_SIZE": 8,         # Da quante persone è composto il torneo
         "MUTATION_RATE": 0.25,         # Probabilità che un peso cambi
@@ -100,34 +100,47 @@ class Config:
         "IMITATION_WEIGHT": 100.0,
     }
 
+    # ---------- CONFIGURAZIONE CARTE ----------
+    CARDS: Dict[str, Any] = {
+        "ENABLED": True,
+        "NUM_JOLLIES": 2,
+        "BONUS_3_INFANTRY": 4,      # 3 Fanteria
+        "BONUS_3_CAVALRY": 6,       # 3 Cavalleria
+        "BONUS_3_ARTILLERY": 8,     # 3 Artiglieria
+        "BONUS_MIXED": 10,          # 1 Fanteria + 1 Cavalleria + 1 Artiglieria
+        "BONUS_WITH_JOLLY": 10,     # Qualsiasi combinazione con Jolly
+        "TERRITORY_BONUS": 2,       # +2 truppe se si possiede il territorio
+    }
+
     # =========================================
-    # 💎 REWARDS (La Motivazione)
+    # 💎 REWARDS
     # =========================================
     REWARD: Dict[str, int] = {
         # --- ESITI PARTITA ---
         "WIN": 7000,
         "LOSS": -8000,
-        "STALEMATE_PENALTY": -4000,
+        "STALEMATE_PENALTY": -6000,
         # --- RINFORZI ---
         "REINFORCE_SAFE_PENALTY": -50,
         "REINFORCE_STACK_PENALTY": -25,
         "REINFORCE_STACK_THRESHOLD": 12,
         "REINFORCE_REPEAT_PENALTY": -30,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 120,
-        "LOSE_TERRITORY": -300,
-        "KILL_ENEMY_ARMY": 10,
-        "LOSE_ARMY": -8,
+        "CONQUER_TERRITORY": 150,
+        "LOSE_TERRITORY": -350,
+        "KILL_ENEMY_ARMY": 15,
+        "LOSE_ARMY": -10,
         "ATTACK_RISK_PENALTY": -60,
         "AVOID_RISK_BONUS": 35,
-        "END_PHASE_LEAVE_ONE_PENALTY": -80,
+        "END_PHASE_LEAVE_ONE_PENALTY": -150,
         "END_PHASE_RISK_PENALTY": -50,
         "END_PHASE_WEAK_FRONTLINE": -60,
         "END_PHASE_PENALTY_CAP": -2000,
-        "CONQUEST_STREAK_CAP": 3,
+        # --- PASSAGGIO TURNO ---
         "PASS_ATTACK_PENALTY": -40,
         "PASS_REPEAT_PENALTY": -10,
-        "PASSIVE_TURN_PENALTY": -10,
+        "PASS_PENALTY_CAP": -300,
+        "PASSIVE_TURN_PENALTY": -23,
         # --- DIFESA / PRESIDIO ---
         "DEFEND_BONUS": 25,
         "DEFEND_HOLD_TERRITORY": 70,
@@ -142,14 +155,14 @@ class Config:
         "INTERNAL_ARMY_PENALTY": -15,
         # --- CONTINENTI / CONTROLLO MAPPA ---
         "HOLD_CONTINENT": 70,
-        "CONQUER_CONTINENT": 150,
+        "CONQUER_CONTINENT": 120,
         "LOSE_CONTINENT": -2000,
         # --- PROGRESSO VERSO LA VITTORIA ---
-        "PROGRESS_TERRITORY_SCALE": 40,
-        "PROGRESS_CONTINENT_SCALE": 30,
+        "PROGRESS_TERRITORY_SCALE": 150,
+        "PROGRESS_CONTINENT_SCALE": 100,
         # --- ERRORI / STALLO / TEMPO ---
         "INVALID_MOVE": -100,
         "INVALID_MOVE_ATTACK": -200,
         "CONSECUTIVE_INVALID_MOVE": -500,
-        "GAME_LENGTH_PENALTY": -10,
+        "GAME_LENGTH_PENALTY": -8,
     }

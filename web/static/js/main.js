@@ -3,6 +3,7 @@ import { CONSTANTS } from "./constants.js";
 import { DOM, addLog, clearSelection, closeBattleOverlay, syncControlState, updateQuantityUI, updateSpeedLabel } from "./ui.js";
 import { updateZoom } from "./board.js";
 import { handleMessage, sendAction, sendControl, sendPass, setSpeed, startMode } from "./game.js";
+import { toggleCardPanel } from "./cards.js";
 
 let pendingMode = null;
 
@@ -113,6 +114,13 @@ if (DOM.toggleAutoSkipBattle) {
 if (DOM.btnSend) DOM.btnSend.addEventListener("click", sendAction);
 if (DOM.btnPass) DOM.btnPass.addEventListener("click", () => sendPass());
 if (DOM.btnClear) DOM.btnClear.addEventListener("click", clearSelection);
+
+if (DOM.btnOpenCards) {
+    DOM.btnOpenCards.addEventListener("click", () => toggleCardPanel(true));
+}
+if (DOM.btnCloseCards) {
+    DOM.btnCloseCards.addEventListener("click", () => toggleCardPanel(false));
+}
 
 if (DOM.btnZoomIn) {
     DOM.btnZoomIn.addEventListener("click", () => {

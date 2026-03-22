@@ -61,6 +61,12 @@ class Agent:
             target_id = random.choice(valid_targets)
             return {"type": "REINFORCE", "src": target_id, "dest": target_id, "qty": random.random()}
 
+        if phase == "PLAY_CARDS":
+            if random.random() < 0.5:
+                return {"type": "PLAY_CARDS", "src": 0, "dest": 0, "qty": 0}
+            else:
+                return {"type": "PASS", "src": 0, "dest": 0, "qty": 0}
+
         if phase == "ATTACK":
             # 20% di probabilità di passare
             if random.random() < 0.2:

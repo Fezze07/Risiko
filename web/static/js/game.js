@@ -16,10 +16,11 @@ import {
     updateQuantityUI,
     updateSendButton,
     updateSpeedLabel,
-    updateUIState,
     updateScoreBar,
+    updateUIState,
 } from "./ui.js";
 import { renderBoard, updateBoardVisuals, flashTerritory } from "./board.js";
+import { toggleCardPanel, fetchCards } from "./cards.js";
 
 export function getTerritoryById(id) {
     if (!gameState.boardData || !gameState.boardData.territories) return null;
@@ -93,6 +94,10 @@ export function triggerPhaseAlert() {
         case "MANEUVER":
             title = "FASE: MANOVRA";
             text = "Sposta armate tra territori alleati adiacenti";
+            break;
+        case "PLAY_CARDS":
+            title = "FASE: TATTICA (CARTE)";
+            text = "Controlla le tue carte per bonus rinforzi";
             break;
         default:
             hidePhaseAlert();
@@ -176,8 +181,14 @@ function handleStateUpdate(msg) {
         gameState.isAiPlaying = false;
     }
 
-    if (gameState.mode === "PLAY") triggerPhaseAlert();
-    else hidePhaseAlert();
+    if (gameState.mode === "PLAY") {
+        triggerPhaseAlert();
+        if (gameState.currentPhase === "PLAY_CARDS" && isHumanPlayer(gameState.currentPlayer) && !gameState.isAiPlaying) {
+            toggleCardPanel(true);
+        }
+    } else {
+        hidePhaseAlert();
+    }
 
     if (msg.extra && msg.extra.rolls_att && msg.extra.rolls_def) {
         applySelectionHighlights();
@@ -267,6 +278,16 @@ export function handleMessage(msg) {
         case "game_over":
             handleGameOver(msg);
             break;
+        case "PLAYER_RECEIVED_CARD": {
+            addLog(`[CARTE] Hai ricevuto una nuova carta territorio!`, "log-success");
+            fetchCards();
+            break;
+        }
+        case "PLAYER_ELIMINATED_TRANSFER_CARDS": {
+            addLog(`[CARTE] Ereditate ${msg.amount} carte dal giocatore eliminato!`, "log-success");
+            fetchCards();
+            break;
+        }
         default:
             break;
     }

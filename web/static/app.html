@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/web/static/css/board.css">
     <link rel="stylesheet" href="/web/static/css/panels.css">
     <link rel="stylesheet" href="/web/static/css/overlays.css">
+    <link rel="stylesheet" href="/web/static/css/cards.css">
 </head>
 
 <body>
@@ -104,6 +105,7 @@
                             <button id="btn-pass" class="btn-cyber secondary" disabled>PASS</button>
                             <button id="btn-clear" class="btn-cyber secondary">RESET</button>
                         </div>
+                        <button id="btn-open-cards" class="btn-cyber" style="margin-top: 12px; border-color: #ff00ff;">MY CARDS</button>
                     </div>
                 </div>
             </aside>
@@ -147,6 +149,23 @@
                     <div id="log-container"></div>
                 </section>
             </aside>
+        </div>
+
+        </div>
+
+        <!-- CARDS PANEL -->
+        <div id="card-panel" class="card-panel hidden">
+            <div class="panel-header">
+                <h3>TACTICAL CARDS</h3>
+                <button id="btn-close-cards" style="background:none; border:none; color:white; cursor:pointer; font-size:1.2rem;">×</button>
+            </div>
+            <div id="cards-container" class="cards-container">
+                <!-- Cards injected here -->
+            </div>
+            <div id="card-combo-preview" class="card-combo-preview">
+                <div style="color: rgba(255,255,255,0.3); font-size: 0.8rem;">Seleziona 3 carte per una combinazione</div>
+            </div>
+            <button id="btn-trade-cards" class="trade-btn" disabled>Execute Trade</button>
         </div>
 
         <!-- MODALS -->

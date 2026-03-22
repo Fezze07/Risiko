@@ -27,6 +27,7 @@ from .constants import (
     MIN_PLAYERS,
 )
 from .helpers import fallback_player_colors, normalize_role
+from web.session import game_session
 
 
 async def ws_game_handler(
@@ -57,6 +58,8 @@ async def ws_game_handler(
             await ws.send_text(json.dumps(data))
         except Exception:
             pass
+            
+    game_session.send_json_cb = send_json
 
     def clamp_delay(value: Any) -> int:
         try:
@@ -178,6 +181,8 @@ async def ws_game_handler(
         if extra_info:
             payload["extra"] = extra_info
         await send_json(payload)
+        
+    game_session.send_state_update_cb = send_state_update
 
     async def send_game_over() -> None:
         nonlocal game_over
@@ -229,7 +234,31 @@ async def ws_game_handler(
                     "action": action,
                 }
 
+        cards_enabled = Config.CARDS.get('ENABLED', False)
+        hand_size_before = len(env.card_manager.player_hands[player_id]) if cards_enabled else 0
+
         reward, done, info = env.step(action, player_id)
+
+        if cards_enabled:
+            hand_size_after = len(env.card_manager.player_hands[player_id])
+            diff = hand_size_after - hand_size_before
+            if diff > 0:
+                if diff == 1 and info.get('action') == 'Pass in PLAY_CARDS phase':
+                    # Actually end_turn runs inside step when passing/ending maneuver. So single card gain happens there
+                    await send_json({"type": "PLAYER_RECEIVED_CARD", "player": player_id})
+                elif 'defender_id' in info and getattr(env, 'is_game_over', lambda: False):
+                    # Check elimination during attack
+                    alive_players = [p for p in env._player_ids() if len(env.board.get_player_territories(p)) > 0]
+                    if info['defender_id'] not in alive_players:
+                        # Transfer occurred
+                        await send_json({"type": "PLAYER_ELIMINATED_TRANSFER_CARDS", "player": player_id, "amount": diff})
+                else:
+                    # Generic fallback check
+                    if diff == 1:
+                        await send_json({"type": "PLAYER_RECEIVED_CARD", "player": player_id})
+                    elif diff > 1:
+                        await send_json({"type": "PLAYER_ELIMINATED_TRANSFER_CARDS", "player": player_id, "amount": diff})
+
         info["last_action"] = {
             "type": action.get("type"),
             "player": player_id,
@@ -370,6 +399,9 @@ async def ws_game_handler(
         }
 
         env = RisikoEnvironment(num_players=num_players)
+        game_session.env = env
+        game_session.mode = mode
+        
         processor = Processor(env.board)
         coords = territory_coords(env.board.n)
         cols = int(math.sqrt(env.board.n))

@@ -20,9 +20,10 @@ class Processor:
     def _normalize_phase(phase: str) -> float:
         phases = {
             "INITIAL_PLACEMENT": 0.0,
-            "REINFORCE": 0.25,
-            "ATTACK": 0.5,
-            "POST_ATTACK_MOVE": 0.75,
+            "PLAY_CARDS": 0.2,
+            "REINFORCE": 0.4,
+            "ATTACK": 0.6,
+            "POST_ATTACK_MOVE": 0.8,
             "MANEUVER": 1.0
         }
         return phases.get(phase, 0.0)
@@ -156,6 +157,16 @@ class Processor:
                 "dest": target_id,
                 "qty": qty_percent,
             }
+
+        elif current_phase == "PLAY_CARDS":
+            play_cards_threshold = Config.NN.get("PLAY_CARDS_THRESHOLD", 0.5)
+            if raw_decision > play_cards_threshold:
+                action = {
+                    "type": "PLAY_CARDS",
+                    "src": 0, "dest": 0, "qty": 0
+                }
+            else:
+                action = {"type": "PASS", "src": 0, "dest": 0, "qty": 0}
 
         elif current_phase == "ATTACK":
             attack_threshold = Config.NN.get("ATTACK_DECISION_THRESHOLD", 0.4)

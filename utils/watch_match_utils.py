@@ -103,15 +103,33 @@ class WatchMatchUtils:
         if info.get('safe_action_bonus') and not any('azione sicura' in r.lower() for r in reasons):
             reasons.append('bonus azione sicura')
         
-        if info.get('progress_reward'):
-            reasons.append('Progresso mappa')
         if info.get('game_length_penalty'):
             reasons.append('Penalità tempo')
         
-        if reasons:
-            return ' | '.join(reasons)
-        
-        return 'OK'
+        # New MANEUVER and PASS specific reasons
+        elif action_type == 'MANEUVER':
+            if info.get('strategic_move'):
+                reasons.append('Spostamento strategico')
+            if info.get('cleared_safe_zone'):
+                reasons.append('Svuotamento retrovia')
+            if info.get('error'):
+                reasons.append(f"ERROR: {info['error']}")
+
+        elif action_type == 'PASS':
+            if info.get('repeat_pass_penalty'):
+                reasons.append('Malus PASS ripetuto')
+            if info.get('error'):
+                reasons.append(f"ERROR: {info['error']}")
+
+        # Penalità armate inattive si applica sia a PASS che MANEUVER a fine turno
+        if action_type in ('PASS', 'MANEUVER'):
+            if info.get('inactive_army_penalty'):
+                count = info.get('inactive_army_count', 0)
+                reasons.append(f'Malus armate inattive (x{count})')
+            if info.get('holding_bonus'):
+                reasons.append('Premio possedimenti')
+
+        return " | ".join(reasons) if reasons else "OK"
 
     @staticmethod
     def format_log_line(player_id: int, action: Dict[str, Any], reward: int, reason: str) -> str:

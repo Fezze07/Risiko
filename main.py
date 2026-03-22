@@ -86,7 +86,8 @@ class Main:
         max_gens = self._determine_generations()
         generation = 0
         while True:
-            if max_gens is not None and generation >= max_gens:
+            # Se max_gens è <= 0, consideriamo il training infinito
+            if max_gens is not None and max_gens > 0 and generation >= max_gens:
                 break
 
             for agent in self.evo_manager.population:
@@ -115,10 +116,9 @@ class Main:
             post_attack_reward_sum = 0.0
             maneuver_reward_sum = 0.0
             
-            post_move_risky = 0
+            post_move_high_threat = 0
+            post_move_weak_front = 0
             post_move_count = 0
-            
-            max_chain_attacks = 0
             total_territories_captured = 0
             total_frontline_weakness = 0
             total_end_phase_evals = 0
@@ -143,10 +143,10 @@ class Main:
                 post_attack_reward_sum += stats.get('post_attack_move_reward_sum', 0.0)
                 maneuver_reward_sum += stats.get('maneuver_reward_sum', 0.0)
                 
-                post_move_risky += stats.get('post_move_risky', 0)
+                post_move_high_threat += stats.get('post_move_high_threat', 0)
+                post_move_weak_front += stats.get('post_move_weak_front', 0)
                 post_move_count += stats.get('post_move_count', 0)
                 
-                max_chain_attacks = max(max_chain_attacks, stats.get('consecutive_attacks_max', 0))
                 total_territories_captured += stats.get('territories_captured', 0)
                 total_frontline_weakness += stats.get('frontline_weakness_penalties', 0)
                 total_end_phase_evals += stats.get('end_phase_eval_count', 0)
@@ -168,9 +168,11 @@ class Main:
             best_agent = max(population, key=lambda x: x.fitness)
             avg_fitness = sum(a.fitness for a in population) / len(population)
 
-            post_move_risky_pct = 0.0
+            high_threat_pct = 0.0
+            weak_front_pct = 0.0
             if total_end_phase_evals > 0:
-                post_move_risky_pct = (post_move_risky / total_end_phase_evals) * 100
+                high_threat_pct = (post_move_high_threat / total_end_phase_evals) * 100
+                weak_front_pct = (post_move_weak_front / total_end_phase_evals) * 100
 
             reinforce_avg = 0.0
             attack_avg = 0.0
@@ -196,22 +198,30 @@ class Main:
             best_color = Fore.GREEN if best_agent.fitness >= 0 else Fore.RED
             avg_color = Fore.GREEN if avg_fitness >= 0 else Fore.RED
             
-            if post_move_risky_pct >= 50:
+            if high_threat_pct >= 50:
                 risky_color = Fore.RED
-            elif post_move_risky_pct >= 30:
+            elif high_threat_pct >= 20:
                 risky_color = Fore.YELLOW
             else:
                 risky_color = Fore.GREEN
+            
+            if weak_front_pct >= 60:
+                weak_color = Fore.RED
+            elif weak_front_pct >= 30:
+                weak_color = Fore.YELLOW
+            else:
+                weak_color = Fore.GREEN
 
             print(
                 f"GEN {generation + 1} | Best: {best_color}{best_agent.fitness:.2f}{Style.RESET_ALL} "
                 f"| Avg: {avg_color}{avg_fitness:.2f}{Style.RESET_ALL}"
-                f"| Risky: {risky_color}{post_move_risky_pct:.1f}%{Style.RESET_ALL} \n"
+                f"| Risky: {risky_color}{high_threat_pct:.1f}%{Style.RESET_ALL}"
+                f"| Weak: {weak_color}{weak_front_pct:.1f}%{Style.RESET_ALL} \n"
                 f"| Reinforce avg: {reinforce_avg:.2f} | Attack avg: {attack_avg:.2f} "
                 f"| PostAttack avg: {post_attack_avg:.2f} | Maneuver avg: {maneuver_avg:.2f} \n"
                 f"| Pass: {pass_pct:.1f}% | Rein: {reinforce_pct:.1f}% | Att: {attack_pct:.1f}% "
                 f"| Post: {post_attack_pct:.1f}% | Man: {maneuver_pct:.1f}%\n"
-                f"| Chains Max: {max_chain_attacks} | Conq: {total_territories_captured} | FrontWeak: {total_frontline_weakness}\n"
+                f"| Conq: {total_territories_captured} | FrontWeak: {total_frontline_weakness}\n"
             )
 
 

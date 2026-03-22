@@ -53,6 +53,9 @@ export const DOM = {
     leaderboardCurrent: document.getElementById("leaderboard-current"),
     playerLegend: document.getElementById("player-legend"),
     territoryTooltip: document.getElementById("territory-tooltip"),
+    btnOpenCards: document.getElementById("btn-open-cards"),
+    btnCloseCards: document.getElementById("btn-close-cards"),
+    cardPanel: document.getElementById("card-panel"),
 };
 
 function getPlayerMeta(playerId) {

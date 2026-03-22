@@ -10,7 +10,6 @@ PHASE_KEYS = (
     'maneuver',
 )
 
-
 def _init_phase_stats() -> Dict[str, int]:
     stats: Dict[str, int] = {}
     for key in PHASE_KEYS:
@@ -40,11 +39,15 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, int], Dict[str,
     
     stats: Dict[str, int] = {
         'post_move_count': 0,
-        'post_move_risky': 0,
+        'post_move_high_threat': 0,   # Turni in cui un territorio era sotto minaccia tattica reale (> ratio)
+        'post_move_weak_front': 0,    # Turni in cui un territorio aveva 1 sola armata sul fronte
     }
     stats.update(_init_phase_stats())
 
-    for _ in range(Config.GAME['MAX_TURNS']):
+    # Limite massimo di azioni per evitare loop infiniti, ma molto più alto di MAX_TURNS 
+    # per permettere di raggiungere effettivamente lo stallo o la vittoria.
+    max_actions = Config.GAME.get('MAX_ACTIONS_PER_MATCH', 10000)
+    for _ in range(max_actions):
         curr_p = env.player_turn
         phase = env.current_phase
         
@@ -70,11 +73,12 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, int], Dict[str,
         
         if 'end_phase_frontline_weakness' in info:
             stats['end_phase_eval_count'] += 1
-            if info.get('end_phase_risky', 0) > 0 or info.get('end_phase_left_one', 0) > 0:
-                stats['post_move_risky'] += 1
+            if info.get('end_phase_risky', 0) > 0:
+                stats['post_move_high_threat'] += 1
+            if info.get('end_phase_left_one', 0) > 0:
+                stats['post_move_weak_front'] += 1
 
         if action_type == 'attack' and info.get('conquered'):
-            stats['consecutive_attacks_max'] = max(stats['consecutive_attacks_max'], env.conquest_streak)
             stats['territories_captured'] += 1
 
         if 'end_phase_frontline_weakness' in info:
@@ -101,6 +105,22 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, int], Dict[str,
         if done:
             break
 
+    # --- FINE PARTITA: Distributore Reward Finali ---
+    # Se la partita è finita (per vittoria o stallo), assicuriamoci che TUTTI ricevano i punti.
+    # Nota: env.step() ha già dato i punti a chi ha fatto l'ultima mossa, ma solo se done=True.
+    winner, _ = env.is_game_over()
+    if winner != 0:
+        for p_id_dist in range(1, num_players + 1):
+            # Se la partita è finita per timeout del loop (done=False), nessuno ha preso i punti.
+            # Se finita per done=True, curr_k li ha già presi.
+            
+            # Gestiamo il caso in cui il loop è finito senza done=True: diamo a tutti lo STALEMATE o altro
+            if not done or p_id_dist != curr_p:
+                if winner == p_id_dist:
+                    fitness_map[p_id_dist] += Config.REWARD.get('WIN', 7000)
+                elif winner == -1:
+                    fitness_map[p_id_dist] += Config.REWARD.get('STALEMATE_PENALTY', -6000)
+                else:
+                    fitness_map[p_id_dist] += Config.REWARD.get('LOSS', -8000)
+
     return fitness_map, stats
-
-

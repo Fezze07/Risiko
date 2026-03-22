@@ -165,9 +165,6 @@ class ActionHandler:
         movable = t_src.armies - 1
         min_move = min(movable, max(1, Config.GAME.get("MIN_POST_CONQUEST_MOVE", 1)))
         
-        amount_ratio = qty
-        amount = min_move + int((movable - min_move) * amount_ratio)
-        
         reward = 0
         extra_info: Dict[str, Any] = {}
         
@@ -262,20 +259,20 @@ class ActionHandler:
             is_stacked_before = stack_threshold and armies_before >= stack_threshold
             
             if not is_stacked_before:
-                reward = Config.REWARD['MANEUVER_STRATEGIC']
+                reward += Config.REWARD['MANEUVER_STRATEGIC']
                 extra_info['maneuver_strategic'] = True
             else:
-                reward = Config.REWARD['MANEUVER_PENALTY']
+                reward += Config.REWARD['MANEUVER_PENALTY']
                 extra_info['maneuver_strategic_stacked'] = True
                 excess = t_dest.armies - stack_threshold
                 reward += Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
                 extra_info['stack_penalty'] = True
                 extra_info['stack_excess'] = excess
         elif not src_is_frontline:
-            reward = Config.REWARD.get('MANEUVER_CORRECTLY', 10)
+            reward += Config.REWARD.get('MANEUVER_CORRECTLY', 10)
             extra_info['maneuver_safe_to_safe'] = True
         else:
-            reward = Config.REWARD['MANEUVER_PENALTY']
+            reward += Config.REWARD['MANEUVER_PENALTY']
             extra_info['maneuver_away_from_front'] = True
 
         return reward, extra_info
