@@ -159,15 +159,13 @@ class RisikoEnvironment:
                 self._end_turn()
             elif self.current_phase == 'POST_ATTACK_MOVE':
                 return self._handle_invalid_move('Devi scegliere quante truppe spostare', info)
+            elif self.current_phase == 'PLAY_CARDS':
+                info['action'] = 'Pass in PLAY_CARDS phase'
+                self._start_reinforce_phase(player_id)
             return self._finalize_step(reward, done, info, player_id, action)
 
         # --- ACTION: PLAY CARDS ---
         if self.current_phase == 'PLAY_CARDS':
-            if action.get('type') == 'PASS':
-                info['action'] = 'Pass in PLAY_CARDS phase'
-                self._start_reinforce_phase(player_id)
-                return self._finalize_step(reward, done, info, player_id, action)
-
             if action.get('type') == 'PLAY_CARDS':
                 card_indices = action.get('cards', [])
                 if not card_indices:
@@ -199,13 +197,36 @@ class RisikoEnvironment:
         if self.current_phase == 'REINFORCE':
             # Correzione quantità prima della validazione
             if self.armies_to_place > 0:
+                t_dest_in = self.board.territories.get(action.get('dest'))
+                
+                # Caso critico: Territorio già pieno (30)
+                if t_dest_in and t_dest_in.armies >= self.max_armies:
+                    # TENTATIVO DI REINDIRIZZAMENTO AUTOMATICO (per non bloccare l'addestramento)
+                    # Cerchiamo un territorio di frontline che non sia pieno
+                    fallbacks = [t for tid, t in self.board.territories.items() if t.owner_id == player_id and t.armies < self.max_armies]
+                    if fallbacks:
+                        # Priorità: frontline con minaccia nemica
+                        fronts = [t for t in fallbacks if any(self.board.territories[n].owner_id != player_id for n in t.neighbors)]
+                        target_fallback = random.choice(fronts) if fronts else random.choice(fallbacks)
+                        action['dest'] = target_fallback.id
+                        info['auto_redirected'] = True
+                        reward += Config.REWARD.get('INVALID_MOVE', -100) // 10 # Penalità minima simbolica
+                    else:
+                        return self._handle_invalid_move('Tutti i territori sono pieni', info)
+
+                t_dest = self.board.territories.get(action.get('dest'))
+                space_left = self.max_armies - t_dest.armies if t_dest else self.max_armies
+                space_left = max(0, space_left)
+
                 # Usa armies_to_place_total per calcolare la quantità minima per avere 1 armata
                 min_qty = 1.0 / self.armies_to_place_total
                 if action.get('qty', 0.0) < min_qty:
                     action['qty'] = min_qty
                 
                 req = max(1, int(self.armies_to_place_total * action.get('qty', 0.0)))
-                action['qty'] = min(1.0, min(req, self.armies_to_place) / self.armies_to_place)
+                # Cap basato sia su truppe disponibili che su spazio rimasto nel territorio
+                req = min(req, self.armies_to_place, space_left)
+                action['qty'] = min(1.0, req / self.armies_to_place) if self.armies_to_place > 0 else 0.0
 
             is_valid, err_msg = ActionValidator.validate_reinforce(self.board, player_id, action, self.armies_to_place, self.max_armies)
             if not is_valid: return self._handle_invalid_move(err_msg, info)
@@ -241,6 +262,20 @@ class RisikoEnvironment:
             self.attacked_territories_this_turn.add(action['dest'])
             # Tracciamo il territorio sorgente (da cui abbiamo tolto truppe)
             self.moved_from_territories.add(action['src'])
+
+            # Feedback istantaneo "Attacco Suicida": se il territorio sorgente è rimasto con 1 armata
+            # ed è esposto ai nemici, penalizziamo immediatamente per dare un segnale diretto alla rete.
+            t_src = self.board.territories.get(action['src'])
+            if t_src and t_src.armies <= 1:
+                enemy_neighbors = [n for n in t_src.neighbors if self.board.territories[n].owner_id != player_id]
+                if enemy_neighbors:
+                    max_enemy_threat = max(self.board.territories[n].armies for n in enemy_neighbors)
+                    # Penalità scalata con la minaccia: più il nemico è forte, più è grave lasciare 1 armata
+                    ratio = min(1.0, max_enemy_threat / 10.0)
+                    suicide_pen = int(Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -120) * ratio)
+                    reward += suicide_pen
+                    info['instant_suicide_penalty'] = suicide_pen
+
             if conquered:
                 self.has_attacked_this_turn = True
                 self.card_manager.mark_conquest(player_id)
@@ -254,6 +289,19 @@ class RisikoEnvironment:
         elif self.current_phase == 'POST_ATTACK_MOVE':
             self.repeat_pass[player_id] = 0
             if self.pending_attack_src is None: return self._handle_invalid_move('Stato post conquista non valido', info)
+            
+            # Cap preventivo per MAX_ARMIES
+            t_src = self.board.territories.get(self.pending_attack_src)
+            t_dest = self.board.territories.get(self.pending_attack_dest)
+            if t_src and t_dest:
+                space_left = self.max_armies - t_dest.armies
+                movable = t_src.armies - 1
+                if movable > space_left:
+                    # Ricalcoliamo qty per non superare il limite
+                    max_qty = space_left / movable if movable > 0 else 0.0
+                    if action.get('qty', 1.0) > max_qty:
+                        action['qty'] = max_qty
+
             action['src'], action['dest'] = self.pending_attack_src, self.pending_attack_dest
             is_valid, err_msg = ActionValidator.validate_post_attack_move(self.board, player_id, action['src'], action['dest'])
             if not is_valid: return self._handle_invalid_move(err_msg, info)
@@ -269,11 +317,33 @@ class RisikoEnvironment:
 
         # --- ACTION: MANEUVER ---
         elif self.current_phase == 'MANEUVER':
+            if action.get('type') == 'PASS':
+                info['action'] = 'Pass in MANEUVER phase'
+                # ... (rest of pass logic)
+                # Note: The pass logic is handled earlier in the 'if action[type] == PASS' block
+                pass 
+
             # Assicuriamoci che se l'IA decide di manovrare, sposti almeno 1 armata
             t_src = self.board.territories.get(action.get('src'))
-            if t_src and t_src.armies > 1:
+            t_dest = self.board.territories.get(action.get('dest'))
+            
+            if t_src and t_dest and t_src.armies > 1:
+                space_left = self.max_armies - t_dest.armies
+                if space_left <= 0:
+                    # FALLBACK: Se il target è pieno, trasformiamo in un PASS per evitare penalità
+                    info['maneuver_target_full'] = True
+                    action['type'] = 'PASS'
+                    # Saltiamo al blocco del PASS rieseguendolo logicamente
+                    return self.step(action, player_id)
+
                 movable = t_src.armies - 1
-                if action.get('qty', 0.0) * movable < 1.0:
+                # Cap preventivo basato su spazio rimasto nel target
+                max_qty = space_left / movable if movable > 0 else 0.0
+                if action.get('qty', 0.0) > max_qty:
+                    action['qty'] = max_qty
+                
+                # Minimo 1 armata (se c'è spazio)
+                if action.get('qty', 0.0) * movable < 1.0 and space_left >= 1:
                     action['qty'] = 1.0 / movable if movable > 0 else 0.0
             
             is_valid, err_msg = ActionValidator.validate_maneuver(self.board, player_id, action, self.max_armies)
@@ -443,20 +513,21 @@ class RisikoEnvironment:
 
 
     def _get_holding_bonus(self, player_id: int, info: Dict[str, Any]) -> int:
-        """Premio ricorrente per il possesso territoriale a fine turno."""
-        lands = len(self.board.get_player_territories(player_id))
-        t_bonus = int((lands / float(self.board.n)) * Config.REWARD.get('PROGRESS_TERRITORY_SCALE', 0)) if self.board.n else 0
+        """Premio ricorrente per il possesso di interi continenti a fine turno."""
+        total_bonus = 0
+        held_continents = []
         
-        c_sum = 0.0
-        for _, data in Config.CONTINENTS.items():
+        for c_name, data in Config.CONTINENTS.items():
             owned = sum(1 for t_id in data['t_ids'] if self.board.territories[t_id].owner_id == player_id)
-            c_sum += owned / float(len(data['t_ids']))
-        c_bonus = int(c_sum * Config.REWARD.get('PROGRESS_CONTINENT_SCALE', 0))
+            if owned == len(data['t_ids']):
+                # Il giocatore possiede l'intero continente
+                total_bonus += Config.REWARD.get('HOLD_CONTINENT', 70)
+                held_continents.append(c_name)
         
-        total = t_bonus + c_bonus
-        if total > 0:
-            info['holding_bonus'] = total
-        return total
+        if total_bonus > 0:
+            info['holding_bonus'] = total_bonus
+            info['held_continents'] = held_continents
+        return total_bonus
 
     def _get_available_bonus(self, player_id: int) -> int:
         lands = len(self.board.get_player_territories(player_id))

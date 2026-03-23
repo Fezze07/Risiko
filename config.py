@@ -10,7 +10,7 @@ class Config:
         "NUM_PLAYERS": 5,
         "INITIAL_PLACEMENT_ARMIES_PER_TERRITORY": 1.5,
         "INITIAL_PLACEMENT_STEP_DIVISOR": 4,
-        "MAX_ARMIES_PER_TERRITORY": 30,
+        "MAX_ARMIES_PER_TERRITORY": 50,
         "RISK_RATIO": 2.2,
         "MAX_TOTAL_ARMIES": 110,
         "STARTING_ARMIES": 1,
@@ -18,7 +18,8 @@ class Config:
         "MIN_BONUS": 1,
         "MIN_REINFORCE_QTY": 0.05,
         "MIN_POST_CONQUEST_MOVE": 2,
-        "PHASES": ["INITIAL_PLACEMENT", "REINFORCE", "ATTACK", "POST_ATTACK_MOVE", "MANEUVER"]
+        "PHASES": ["INITIAL_PLACEMENT", "REINFORCE", "ATTACK", "POST_ATTACK_MOVE", "MANEUVER"],
+        "MAX_ACTIONS_PER_MATCH": 2000, # Limite per evitare loop infiniti
     }
 
     # =========================================
@@ -57,7 +58,7 @@ class Config:
     # 🧠 NEURAL NETWORK SETTINGS (Il Cervello)
     # =========================================
     NN: Dict[str, Any] = {
-        "HIDDEN_LAYERS": [128, 64, 32],  # Architettura: 2 strati nascosti
+        "HIDDEN_LAYERS": [256, 128, 128, 64],  # Architettura: 4 strati nascosti
         # L'input sarà: (Num Territori * 3) -> Stato, Armate, Minaccia
         # L'output sarà: [Azione, Sorgente, Destinazione, Quantità]
         "OUTPUT_SIZE": 4,
@@ -71,17 +72,17 @@ class Config:
     # 🧬 EVOLUTION SETTINGS (Motore Genetico)
     # =========================================
     EVOLUTION: Dict[str, Any] = {
-        "POPULATION_SIZE": 100,       # Quanti agenti per generazione
+        "POPULATION_SIZE": 120,       # Quanti agenti per generazione
         "GENERATIONS": 1000000,       # Quante epoche di evoluzione
         "ELITISM_COUNT": 20,          # I top 20 passano alla prossima gen senza modifiche (immortali)
-        "TOURNAMENT_SIZE": 8,         # Da quante persone è composto il torneo
-        "MUTATION_RATE": 0.25,         # Probabilità che un peso cambi
+        "TOURNAMENT_SIZE": 12,         # Da quante persone è composto il torneo
+        "MUTATION_RATE": 0.03,         # Probabilità che un peso cambi
         "MUTATION_STRENGTH": 0.05,     # Quanto forte è lo "scossone" al peso (deviazione standard)
         "MUTATION_STRENGTH_MIN": 0.02, # Limite inferiore della mutazione dinamica
         "MUTATION_STRENGTH_MAX": 0.12, # Limite superiore della mutazione dinamica
         "MUTATION_STRENGTH_BOOST": 1.5,# Fattore di aumento mutazione in stallo breve
         "CROSSOVER_RATE": 0.7,        # Frequenza di scambio DNA tra genitori
-        "STAGNATION_WINDOW": 8,       # Finestra generazioni per rilevare stallo
+        "STAGNATION_WINDOW": 12,       # Finestra generazioni per rilevare stallo
         "STAGNATION_TRIGGER": 40,     # Generazioni consecutive prima della "catastrofe"
         "CATASTROPHE_MUTATION_RATE": 0.35, # Quota geni mutati nella catastrofe
         "CATASTROPHE_STRENGTH_MULT": 1.5,  # Moltiplicatore forza mutazione in catastrofe
@@ -117,19 +118,20 @@ class Config:
     # =========================================
     REWARD: Dict[str, int] = {
         # --- ESITI PARTITA ---
-        "WIN": 7000,
+        "WIN": 10000,
         "LOSS": -8000,
         "STALEMATE_PENALTY": -6000,
+        "ELIMINATE_PLAYER": 2500,
+        "ELIMINATION_PENALTY": -15000,
         # --- RINFORZI ---
         "REINFORCE_SAFE_PENALTY": -50,
         "REINFORCE_STACK_PENALTY": -25,
         "REINFORCE_STACK_THRESHOLD": 12,
         "REINFORCE_REPEAT_PENALTY": -30,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 150,
-        "LOSE_TERRITORY": -350,
+        "CONQUER_TERRITORY": 100,
         "KILL_ENEMY_ARMY": 15,
-        "LOSE_ARMY": -10,
+        "LOSE_ARMY": -30,
         "ATTACK_RISK_PENALTY": -60,
         "AVOID_RISK_BONUS": 35,
         "END_PHASE_LEAVE_ONE_PENALTY": -150,
@@ -138,9 +140,9 @@ class Config:
         "END_PHASE_PENALTY_CAP": -2000,
         # --- PASSAGGIO TURNO ---
         "PASS_ATTACK_PENALTY": -40,
-        "PASS_REPEAT_PENALTY": -10,
+        "PASS_REPEAT_PENALTY": -8,
         "PASS_PENALTY_CAP": -300,
-        "PASSIVE_TURN_PENALTY": -23,
+        "PASSIVE_TURN_PENALTY": -40,
         # --- DIFESA / PRESIDIO ---
         "DEFEND_BONUS": 25,
         "DEFEND_HOLD_TERRITORY": 70,
@@ -156,10 +158,6 @@ class Config:
         # --- CONTINENTI / CONTROLLO MAPPA ---
         "HOLD_CONTINENT": 70,
         "CONQUER_CONTINENT": 120,
-        "LOSE_CONTINENT": -2000,
-        # --- PROGRESSO VERSO LA VITTORIA ---
-        "PROGRESS_TERRITORY_SCALE": 150,
-        "PROGRESS_CONTINENT_SCALE": 100,
         # --- ERRORI / STALLO / TEMPO ---
         "INVALID_MOVE": -100,
         "INVALID_MOVE_ATTACK": -200,

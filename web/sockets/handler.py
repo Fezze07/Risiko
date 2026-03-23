@@ -191,8 +191,28 @@ async def ws_game_handler(
         winner, _ = env.is_game_over()
         if winner > 0:
             reason_msg = f"Vittoria per Missione: {format_mission(get_mission_for_player(winner))}"
-        else:
+        elif winner == -1:
             reason_msg = "Pareggio (Limite Turni)"
+        else:
+            reason_msg = "Partita terminata"
+
+        # Aggiungiamo log finali per i premi di fine partita
+        for p_id in range(1, num_players + 1):
+            status = ""
+            final_reward = 0
+            if winner == -1:
+                status = "STALEMATE"
+                final_reward = Config.REWARD.get('STALEMATE_PENALTY', -6000)
+            elif p_id == winner:
+                status = "WIN"
+                final_reward = Config.REWARD.get('WIN', 7000)
+            else:
+                status = "LOSS"
+                final_reward = Config.REWARD.get('LOSS', -8000)
+            
+            log_msg = f"[MATCH END] P{p_id}: {status} ({final_reward:+d} punti)"
+            action_log.append(log_msg)
+            await send_json({"type": "log", "entry": log_msg, "reward": final_reward, "player": p_id})
 
         await send_json(
             {
@@ -298,6 +318,24 @@ async def ws_game_handler(
         await send_state_update(info)
 
         if done:
+            # Distribuiamo i reward finali a TUTTI i giocatori che non sono l'acting player
+            # (L'acting player ha già ricevuto il suo reward tramite il return di env.step())
+            winner, _ = env.is_game_over()
+            for other_id in range(1, num_players + 1):
+                if other_id == player_id: 
+                    continue # Già gestito sopra
+                
+                final_r = 0
+                if winner == -1: # Pareggio
+                    final_r = Config.REWARD.get('STALEMATE_PENALTY', -6000)
+                elif other_id == winner: # Caso raro: vincitore passivo (es. rimasto solo)
+                    final_r = Config.REWARD.get('WIN', 7000)
+                else: # Sconfitto
+                    final_r = Config.REWARD.get('LOSS', -8000)
+                
+                player_scores[other_id] = int(player_scores.get(other_id, 0) + final_r)
+                # Aggiungiamo anche un log silenzioso o aggiorniamo i log di fine partita
+            
             await send_game_over()
             return
 

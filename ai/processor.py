@@ -6,15 +6,51 @@ from config import Config
 
 
 class Processor:
-    FEATURES_PER_TERRITORY = 4
-    GLOBAL_FEATURES = 4
+    FEATURES_PER_TERRITORY = 13  # mine, armies, enemy, threat, front, cont, vuln, gate, choke, cont_ratio, attack, defense, cluster
+    GLOBAL_FEATURES = 18        # orig(10) + ratios(5) + consecutive_att, gained_this_turn, lost_last_turn
 
     def __init__(self, board: Board):
         self.num_territories: int = board.n
         self.features_per_territory: int = self.FEATURES_PER_TERRITORY
         self.num_global_features: int = self.GLOBAL_FEATURES
-        # Input size: (territories * 4) + global
+        # Input size: (territories * 8) + global
         self.input_size: int = (self.num_territories * self.features_per_territory) + self.num_global_features
+
+        # Pre-calcolo mappa continenti (0-1)
+        continent_names = list(Config.CONTINENTS.keys())
+        self._territory_continent = {} 
+        for i, (c_name, data) in enumerate(Config.CONTINENTS.items()):
+            c_norm = (i + 1) / max(1, len(continent_names))
+            for t_id in data['t_ids']:
+                self._territory_continent[t_id] = c_norm
+
+        # Pre-calcolo Gateway, Chokepoint e Centralità
+        from core.world import TERRITORIES as WORLD_T
+        self._gateway_score = {}  # Connettività cross-continente
+        self._chokepoint_score = {} # Nodo di transito critico (degree centrality)
+        
+        for t_id, t_data in WORLD_T.items():
+            t_continent = t_data.get('continent', '')
+            neighbors = t_data.get('neighbors', [])
+            
+            # Gateway: quanto connette altri continenti (pesato)
+            cross = sum(1 for n_id in neighbors if WORLD_T.get(n_id, {}).get('continent', '') != t_continent)
+            self._gateway_score[t_id] = min(1.0, cross / 2.5) # 1 cross = 0.4, 2+ = 0.8+
+            
+            # Chokepoint: basato sul numero di connessioni totali (degree)
+            # Un territorio con molti vicini è un nodo critico in Risiko
+            self._chokepoint_score[t_id] = min(1.0, len(neighbors) / 6.0)
+
+        # Memoria temporale
+        self._prev_army_count = -1
+        self._prev_territory_count = -1
+        
+        # Tracking Turnale
+        self._current_turn_id = -1
+        self._turn_start_territories = -1
+        self._consecutive_attacks = 0
+        self._territories_lost_last_turn = 0
+        self._last_game_territory_count = -1
 
     @staticmethod
     def _normalize_phase(phase: str) -> float:
@@ -61,51 +97,170 @@ class Processor:
         max_armies = max(1, int(Config.GAME["MAX_ARMIES_PER_TERRITORY"]))
         total_players = self._resolve_total_players(board, current_player_id)
 
-        # 1) Territory Features
+        # 1) Pre-calcolo dati globali e di proprietà
+        my_territories_ids = [t_id for t_id, t in board.territories.items() if t.owner_id == current_player_id]
+        my_territory_count = len(my_territories_ids)
+        my_army_count = sum(board.territories[tid].armies for tid in my_territories_ids)
+        
+        # Statistiche continenti per il giocatore attuale
+        cont_stats = {} # c_name -> {'total': n, 'mine': n, 'ratio': f}
+        full_continents = 0
+        partial_continents = 0
+        for c_name, data in Config.CONTINENTS.items():
+            t_ids = data['t_ids']
+            mine = sum(1 for tid in t_ids if board.territories[tid].owner_id == current_player_id)
+            ratio = mine / len(t_ids)
+            cont_stats[c_name] = ratio
+            if ratio == 1.0: full_continents += 1
+            elif ratio > 0: partial_continents += 1
+
+        # Mappa territorio -> nome continente per lookup veloce
+        t_to_cname = {}
+        for c_name, data in Config.CONTINENTS.items():
+            for tid in data['t_ids']: t_to_cname[tid] = c_name
+
+        # 2) Territory Features (13 per territorio)
+        frontline_count = 0
         for territory_id in range(self.num_territories):
             territory = board.territories[territory_id]
             base = territory_id * self.features_per_territory
-            owner_id = territory.owner_id
+            is_mine = (territory.owner_id == current_player_id)
 
-            # is_mine
-            state_vector[base] = 1.0 if owner_id == current_player_id else 0.0
-
-            # army_count_normalized
+            # [0] is_mine
+            state_vector[base] = 1.0 if is_mine else 0.0
+            # [1] army_count_normalized
             state_vector[base + 1] = min(1.0, territory.armies / max_armies)
+            # [2] enemy_id_relative
+            if not is_mine and territory.owner_id is not None:
+                relative_id = (territory.owner_id - current_player_id) % total_players
+                if relative_id == 0: relative_id = total_players - 1
+                state_vector[base + 2] = self._normalize_enemy_relative(relative_id, total_players)
+            
+            # Analisi vicinato
+            enemy_neighbor_armies = 0
+            ally_neighbor_armies = 0
+            max_enemy_neighbor = 0
+            max_attack_opp = 0
+            has_enemy_neighbor = False
+            
+            for n_id in territory.neighbors:
+                neigh = board.territories[n_id]
+                if neigh.owner_id not in (None, current_player_id):
+                    enemy_neighbor_armies += neigh.armies
+                    has_enemy_neighbor = True
+                    max_enemy_neighbor = max(max_enemy_neighbor, neigh.armies)
+                    if is_mine: # Se è mio, quanto è facile attaccare lui?
+                        max_attack_opp = max(max_attack_opp, territory.armies / (neigh.armies + 0.1))
+                elif neigh.owner_id == current_player_id:
+                    ally_neighbor_armies += neigh.armies
 
-            # enemy_id_relative
-            enemy_relative = 0.0
-            if owner_id is not None and owner_id != current_player_id:
-                relative_id = (owner_id - current_player_id) % total_players
-                if relative_id == 0:
-                    relative_id = total_players - 1
-                enemy_relative = self._normalize_enemy_relative(relative_id, total_players)
-            state_vector[base + 2] = enemy_relative
+            # [3] threat_level
+            total_possible_threat = max_armies * max(1, len(territory.neighbors))
+            state_vector[base + 3] = min(1.0, enemy_neighbor_armies / total_possible_threat)
+            # [4] is_frontline
+            if has_enemy_neighbor:
+                state_vector[base + 4] = 1.0
+                if is_mine: frontline_count += 1
+            # [5] continent_id
+            state_vector[base + 5] = self._territory_continent.get(territory_id, 0.0)
+            # [6] vulnerability_ratio (Log scaling per evitare saturazione immediata)
+            vuln = enemy_neighbor_armies / (territory.armies + 1.0)
+            state_vector[base + 6] = min(1.0, np.log1p(vuln) / 2.0) # log(1+10)/2 ~ 1.2, log(1+3)/2 ~ 0.7
+            # [7] gateway_score
+            state_vector[base + 7] = self._gateway_score.get(territory_id, 0.0)
+            # [8] chokepoint_score
+            state_vector[base + 8] = self._chokepoint_score.get(territory_id, 0.0)
+            # [9] continent_control_ratio
+            c_name = t_to_cname.get(territory_id)
+            state_vector[base + 9] = cont_stats.get(c_name, 0.0)
+            # [10] local_attack_opportunity
+            state_vector[base + 10] = min(1.0, max_attack_opp / 3.0)
+            # [11] defensive_pressure
+            state_vector[base + 11] = min(1.0, max_enemy_neighbor / max_armies)
+            # [12] cluster_strength (Supporto alleato relativo)
+            state_vector[base + 12] = min(1.0, ally_neighbor_armies / (max_armies * 3))
 
-            # threat_level
-            enemy_neighbor_armies = sum(
-                board.territories[n_id].armies
-                for n_id in territory.neighbors
-                if board.territories[n_id].owner_id not in (None, current_player_id)
-            )
-            max_threat = max_armies * max(1, len(territory.neighbors))
-            state_vector[base + 3] = min(1.0, enemy_neighbor_armies / max_threat)
-
-        # 2) Global Features
+        # 3) Global Features (18)
         global_base = self.num_territories * self.features_per_territory
+        # Sweep unico: non pre-seediamo per evitare problemi con giocatori eliminati
+        all_counts: Dict[int, int] = {}
+        all_armies: Dict[int, int] = {}
+        total_world_armies = 0
+        for t in board.territories.values():
+            if t.owner_id is not None:
+                all_counts[t.owner_id] = all_counts.get(t.owner_id, 0) + 1
+                all_armies[t.owner_id] = all_armies.get(t.owner_id, 0) + t.armies
+                total_world_armies += t.armies
         
-        # Num Players (normalized 0-1 for 2-8 range)
+        best_enemy_count = max((v for p, v in all_counts.items() if p != current_player_id), default=1)
+        best_enemy_armies = max((v for p, v in all_armies.items() if p != current_player_id), default=1)
+
+        # 0-9: Esistenti
         state_vector[global_base] = min(1.0, total_players / 8.0)
-        
-        # Turn progress
-        max_turns = Config.GAME.get("MAX_TURNS", 100)
-        state_vector[global_base + 1] = min(1.0, current_turn / max_turns)
-        
-        # Phase (normalized)
+        state_vector[global_base + 1] = min(1.0, current_turn / Config.GAME.get("MAX_TURNS", 100))
         state_vector[global_base + 2] = self._normalize_phase(current_phase)
-        
-        # Player ID (normalized)
         state_vector[global_base + 3] = current_player_id / 8.0
+        
+        # Mission Progress (semplificato)
+        mission_prog = 0.0
+        if mission_data:
+            m_type = mission_data.get('type', '')
+            if m_type == 'territory_count':
+                mission_prog = min(1.0, (my_territory_count / board.n) / max(0.01, float(mission_data.get('target', 1.0))))
+            elif m_type == 'continent_count':
+                mission_prog = full_continents / max(1, int(mission_data.get('target', 1)))
+        state_vector[global_base + 4] = mission_prog
+        
+        state_vector[global_base + 5] = min(1.0, (my_territory_count / max(1, best_enemy_count)) / 2.0)
+        
+        # Delta (Temporali)
+        if self._prev_army_count >= 0:
+            d_a = (my_army_count - self._prev_army_count) / max(10, my_army_count + 1)
+            d_t = (my_territory_count - self._prev_territory_count) / max(1, my_territory_count + 1)
+            state_vector[global_base + 6] = min(1.0, max(-1.0, d_a)) * 0.5 + 0.5
+            state_vector[global_base + 7] = min(1.0, max(-1.0, d_t)) * 0.5 + 0.5
+        else:
+            state_vector[global_base + 6] = 0.5
+            state_vector[global_base + 7] = 0.5
+        
+        state_vector[global_base + 8] = min(1.0, total_world_armies / (board.n * 20))
+        state_vector[global_base + 9] = min(1.0, best_enemy_count / board.n)
+
+        # 10-14: Nuove Globali Ratios
+        state_vector[global_base + 10] = my_army_count / max(1, total_world_armies)
+        state_vector[global_base + 11] = best_enemy_armies / max(1, total_world_armies)
+        state_vector[global_base + 12] = full_continents / len(Config.CONTINENTS)
+        state_vector[global_base + 13] = partial_continents / len(Config.CONTINENTS)
+        state_vector[global_base + 14] = frontline_count / max(1, my_territory_count)
+
+        # 15-17: Tracking Temporale Avanzato
+        # Gestione cambio turno
+        if current_turn != self._current_turn_id:
+            if self._current_turn_id != -1: # Non è il primo turno assoluto
+                # Calcola quanto abbiamo perso dall'ultimo nostro stato visto
+                if self._last_game_territory_count > 0:
+                    lost = max(0, self._last_game_territory_count - my_territory_count)
+                    self._territories_lost_last_turn = lost
+            
+            self._current_turn_id = current_turn
+            self._turn_start_territories = my_territory_count
+            self._consecutive_attacks = 0
+            
+        # Incremento attacchi se siamo in fase ATTACK o POST_ATTACK
+        if current_phase in ('ATTACK', 'POST_ATTACK_MOVE'):
+            self._consecutive_attacks += 1
+            
+        # Guarda: _turn_start_territories può essere -1 al primissimo call prima di un cambio turno
+        gained_this_turn = max(0, my_territory_count - self._turn_start_territories) if self._turn_start_territories >= 0 else 0
+        
+        state_vector[global_base + 15] = min(1.0, self._consecutive_attacks / 20.0)
+        state_vector[global_base + 16] = min(1.0, gained_this_turn / 5.0)
+        state_vector[global_base + 17] = min(1.0, self._territories_lost_last_turn / 3.0)
+
+        # Update Memoria
+        self._prev_army_count = my_army_count
+        self._prev_territory_count = my_territory_count
+        self._last_game_territory_count = my_territory_count
 
         return state_vector
 
@@ -170,7 +325,6 @@ class Processor:
 
         elif current_phase == "ATTACK":
             attack_threshold = Config.NN.get("ATTACK_DECISION_THRESHOLD", 0.4)
-            valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
             valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
             min_ratio = float(Config.NN.get("ATTACK_MIN_RATIO", 1.0))
             min_adv = int(Config.REWARD.get("PASS_ATTACK_MIN_ADVANTAGE", 0))

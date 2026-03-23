@@ -44,6 +44,10 @@ async def index():
 async def app_page():
     return FileResponse(str(STATIC_DIR / "app.html"))
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse(str(STATIC_DIR / "favicon.ico"))
+
 # ---------------- CARDS API ----------------
 
 class CardSelection(BaseModel):

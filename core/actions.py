@@ -129,22 +129,27 @@ class ActionHandler:
             t_def.armies = 0
             extra_info['conquered'] = True
 
-            # Penalità per il difensore: ha perso un territorio
-            opponent_reward += Config.REWARD.get('LOSE_TERRITORY', -300)
-
             # Controlla se l'attaccante ha completato un continente
             for c_name, data in Config.CONTINENTS.items():
                 if t_def.id in data['t_ids']:
                     if all(board.territories[tid].owner_id == player_id for tid in data['t_ids']):
                         extra_info['continent_complete'] = True
 
-            # Controlla se il difensore ha perso un continente che possedeva
+            # Controlla se il difensore ha perso un continente (solo log, nessuna penalità)
             for c_name, data in Config.CONTINENTS.items():
                 if t_def.id in data['t_ids']:
                     other_ids = [tid for tid in data['t_ids'] if tid != t_def.id]
                     if other_ids and all(board.territories[tid].owner_id == old_owner for tid in other_ids):
-                        opponent_reward += Config.REWARD.get('LOSE_CONTINENT', -2000)
                         extra_info['continent_lost'] = True
+            
+            # Se il difensore ha perso il suo ULTIMO territorio, viene eliminato.
+            # Questo evita che chi perde subito (e smette di prendere penalità passive) 
+            # abbia un punteggio finale migliore di chi resta in gioco.
+            still_has_territories = any(t.owner_id == old_owner for t in board.territories.values())
+            if not still_has_territories:
+                reward += Config.REWARD.get('ELIMINATE_PLAYER', 2500)
+                opponent_reward += Config.REWARD.get('ELIMINATION_PENALTY', -15000)
+                extra_info['player_eliminated'] = old_owner
         else:
             opponent_reward += Config.REWARD.get('DEFEND_HOLD_TERRITORY', 0)
             extra_info['defend_hold'] = True
@@ -244,35 +249,45 @@ class ActionHandler:
         }
 
         reward = 0
-        # Bonus per svuotamento retrovia (se src non era il fronte)
-        if not src_is_frontline:
+        
+        # Selettore della punizione/premio sulle frontlines in partenza
+        if src_is_frontline and t_src.armies == 1:
+            # Spostamento grave se svuota una frontiera
+            reward += Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -150)
+            extra_info['left_one_army_src'] = True
+            extra_info['maneuver_suicide'] = True
+        elif not src_is_frontline:
+            # Bonus per svuotamento retrovia (se src non era il fronte)
             reward += Config.REWARD.get('MANEUVER_FROM_SAFE_ZONE', 40)
             extra_info['cleared_safe_zone'] = True
 
         if dest_is_frontline:
-            # Bonus strategico: portiamo truppe al fronte
-            reward += Config.REWARD.get('MANEUVER_STRATEGIC', 80)
-            extra_info['strategic_move'] = True
-            
-            stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
-            armies_before = t_dest.armies - amount
-            is_stacked_before = stack_threshold and armies_before >= stack_threshold
-            
-            if not is_stacked_before:
-                reward += Config.REWARD['MANEUVER_STRATEGIC']
-                extra_info['maneuver_strategic'] = True
-            else:
-                reward += Config.REWARD['MANEUVER_PENALTY']
-                extra_info['maneuver_strategic_stacked'] = True
-                excess = t_dest.armies - stack_threshold
-                reward += Config.REWARD['REINFORCE_STACK_PENALTY'] * excess
-                extra_info['stack_penalty'] = True
-                extra_info['stack_excess'] = excess
+            # Bonus strategico: portiamo truppe al fronte sano
+            # Lo neghiamo se la mossa ha appena svuotato un'altra frontiera!
+            if not extra_info.get('maneuver_suicide'):
+                reward += Config.REWARD.get('MANEUVER_STRATEGIC', 80)
+                extra_info['strategic_move'] = True
+                
+                stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
+                armies_before = t_dest.armies - amount
+                is_stacked_before = stack_threshold and armies_before >= stack_threshold
+                
+                if not is_stacked_before:
+                    reward += Config.REWARD.get('MANEUVER_STRATEGIC', 80)
+                    extra_info['maneuver_strategic'] = True
+                else:
+                    reward += Config.REWARD.get('MANEUVER_PENALTY', -50)
+                    extra_info['maneuver_strategic_stacked'] = True
+                    excess = t_dest.armies - stack_threshold
+                    reward += Config.REWARD.get('REINFORCE_STACK_PENALTY', -25) * excess
+                    extra_info['stack_penalty'] = True
+                    extra_info['stack_excess'] = excess
         elif not src_is_frontline:
             reward += Config.REWARD.get('MANEUVER_CORRECTLY', 10)
             extra_info['maneuver_safe_to_safe'] = True
         else:
-            reward += Config.REWARD['MANEUVER_PENALTY']
+            if not extra_info.get('maneuver_suicide'):
+                reward += Config.REWARD.get('MANEUVER_PENALTY', -50)
             extra_info['maneuver_away_from_front'] = True
 
         return reward, extra_info

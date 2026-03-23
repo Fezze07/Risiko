@@ -132,17 +132,33 @@ def load_samples(filename: str, max_samples: Optional[int] = None) -> List[Dict[
 def compute_imitation_bonus(agent, samples: List[Dict[str, Any]], weight: float) -> float:
     if not samples:
         return 0.0
+    
+    expected_input_size = agent.nn.input_size
     total_score = 0.0
+    valid = 0
+    
     for sample in samples:
         state = np.asarray(sample.get("state", []), dtype=np.float32)
         target = np.asarray(sample.get("target", []), dtype=np.float32)
         if state.size == 0 or target.size == 0:
             continue
+        
+        # Gestione cambio architettura: adatta il vettore stato alla dimensione attesa
+        if state.size != expected_input_size:
+            if state.size < expected_input_size:
+                # Padding con zeri per i nuovi neuroni
+                state = np.pad(state, (0, expected_input_size - state.size))
+            else:
+                # Troncatura (vecchio stato più grande)
+                state = state[:expected_input_size]
+        
         output = agent.nn.forward(state)
         loss = np.mean((output - target) ** 2)
         score = max(0.0, 1.0 - float(loss))
         total_score += score
-    if total_score <= 0:
+        valid += 1
+    
+    if valid <= 0:
         return 0.0
-    avg_score = total_score / max(1, len(samples))
+    avg_score = total_score / valid
     return avg_score * weight

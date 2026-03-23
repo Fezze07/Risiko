@@ -116,3 +116,13 @@ class Agent:
 
     def reset_fitness(self) -> None:
         self.fitness = 0
+
+    def reset_memory(self) -> None:
+        """Resetta la memoria temporale all'inizio di ogni match."""
+        self.processor._prev_army_count = -1
+        self.processor._prev_territory_count = -1
+        self.processor._current_turn_id = -1
+        self.processor._turn_start_territories = -1
+        self.processor._consecutive_attacks = 0
+        self.processor._territories_lost_last_turn = 0
+        self.processor._last_game_territory_count = -1

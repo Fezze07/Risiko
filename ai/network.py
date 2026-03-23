@@ -24,10 +24,10 @@ class NeuralNetwork:
             # Operazione core: z = xW + b
             z = np.dot(current_input, layer['w']) + layer['b']
 
-            # Attivazione: ReLU per i livelli nascosti, Sigmoide per l'output
+            # Attivazione: LeakyReLU per i livelli nascosti, Sigmoide per l'output
             if i < len(self.layers) - 1:
-                # ReLU
-                current_input = np.maximum(0, z)
+                # LeakyReLU: evita i "neuroni morti" in reti profonde
+                current_input = np.where(z > 0, z, 0.01 * z)
             else:
                 # Sigmoid (output tra 0 e 1)
                 z = np.clip(z, -500, 500)

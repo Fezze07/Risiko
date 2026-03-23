@@ -33,6 +33,11 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, int], Dict[str,
     env.reset()
     num_players = env.num_players
 
+    # Resetta la memoria temporale degli agenti (delta features)
+    for a in agents_list:
+        if hasattr(a, 'reset_memory'):
+            a.reset_memory()
+
     # Fitness per ogni giocatore
     fitness_map: Dict[int, int] = {p_id: 0 for p_id in range(1, num_players + 1)}
     consecutive_errors: Dict[int, int] = {p_id: 0 for p_id in range(1, num_players + 1)}
