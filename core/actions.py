@@ -19,8 +19,8 @@ class ActionHandler:
     ) -> Tuple[int, int, Dict[str, Any]]:
         t_dest = board.territories[action['dest']]
 
-        qty = action.get('qty', 0.0)
-        if qty <= 0 or qty < Config.GAME.get('MIN_REINFORCE_QTY', 0.0):
+        qty = float(action.get('qty', 0))
+        if qty <= 0 or qty < Config.NN.get('MIN_REINFORCE_QTY', 0.0):
             return Config.REWARD['INVALID_MOVE'], 0, {}
 
         to_add = max(1, int(armies_to_place * qty))
@@ -51,22 +51,6 @@ class ActionHandler:
                 reward += Config.REWARD.get('REINFORCE_SAFE_PENALTY', -50)
                 extra_info['reinforce_safe_penalty'] = True
 
-        # Smart Stacking Reward
-        stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 12)
-        armies_before = t_dest.armies - to_add
-        if stack_threshold and armies_before >= stack_threshold:
-            has_alternative = any(
-                t.owner_id == player_id and t.armies < stack_threshold
-                for t in board.territories.values()
-            )
-            excess = t_dest.armies - stack_threshold
-            penalty = Config.REWARD.get('REINFORCE_STACK_PENALTY', -25) * excess
-            if not has_alternative:
-                penalty = int(penalty * 0.2)
-                extra_info['inevitable_stacking'] = True
-            reward += penalty
-            extra_info['stack_penalty'] = True
-            extra_info['stack_excess'] = excess
 
         return reward, to_add, extra_info
 
@@ -98,26 +82,12 @@ class ActionHandler:
         for i in range(couples):
             if rolls_att[i] > rolls_def[i]:
                 t_def.armies -= 1
-                reward += Config.REWARD['KILL_ENEMY_ARMY']
             else:
                 t_att.armies -= 1
                 reward += Config.REWARD['LOSE_ARMY']
-                opponent_reward += Config.REWARD['DEFEND_BONUS']
 
-        other_enemies = [
-            n for n in t_att.neighbors
-            if board.territories[n].owner_id != player_id and n != t_def.id
-        ]
-        if other_enemies and t_att.armies <= 3:
-            max_threat = max((board.territories[n].armies for n in other_enemies), default=0)
-            if max_threat >= t_att.armies:
-                reward += Config.REWARD['ATTACK_RISK_PENALTY']
-                extra_info['risky_attack'] = True
-        elif not other_enemies:
-            reward += Config.REWARD['AVOID_RISK_BONUS']
-            extra_info['avoid_risk'] = True
-
-        if t_att.armies * Config.GAME.get('RISK_RATIO', 2.0) < t_def.armies and not extra_info.get('risky_attack'):
+        # Attacco Suicida: Penalizzazione pesante se l'esercito difensore è schiacciante
+        if t_att.armies * Config.GAME.get('RISK_RATIO', 2.0) < t_def.armies:
             reward += Config.REWARD['ATTACK_RISK_PENALTY']
             extra_info['risky_attack'] = True
             extra_info['risky_attack_odds'] = True
@@ -151,7 +121,6 @@ class ActionHandler:
                 opponent_reward += Config.REWARD.get('ELIMINATION_PENALTY', -15000)
                 extra_info['player_eliminated'] = old_owner
         else:
-            opponent_reward += Config.REWARD.get('DEFEND_HOLD_TERRITORY', 0)
             extra_info['defend_hold'] = True
 
         return reward, conquered, opponent_reward, extra_info
@@ -168,7 +137,7 @@ class ActionHandler:
         t_dest = board.territories[dest_id]
         
         movable = t_src.armies - 1
-        min_move = min(movable, max(1, Config.GAME.get("MIN_POST_CONQUEST_MOVE", 1)))
+        min_move = min(movable, max(1, Config.NN.get("MIN_POST_CONQUEST_MOVE", 1)))
         
         reward = 0
         extra_info: Dict[str, Any] = {}
@@ -201,10 +170,7 @@ class ActionHandler:
             weight_dest = needed_dest / (needed_src + needed_dest)
             suggested_move = int(movable_pool * weight_dest)
             
-            # Se l'intento si avvicina al suggerimento di sicurezza (+/- 1), diamo un bonus
-            if abs(suggested_move - intent_amount) <= 1:
-                reward += Config.REWARD.get('AVOID_RISK_BONUS', 10)
-                extra_info['balanced_move'] = True
+            pass
         
         # Ora usiamo SEMPRE l'intento originale, limitato solo dai pool reali
         amount = max(min_move, min(intent_amount, movable_pool))
@@ -216,10 +182,6 @@ class ActionHandler:
         t_src.armies -= amount
         t_dest.armies += amount
         
-        if not enemies_dest and not enemies_src:
-            reward += Config.REWARD.get('AVOID_RISK_BONUS', 35)
-            extra_info['avoid_risk'] = True
-
         return reward, extra_info
 
     def execute_maneuver(self, board: Board, player_id: int, action: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
@@ -250,46 +212,11 @@ class ActionHandler:
 
         reward = 0
         
-        # Selettore della punizione/premio sulle frontlines in partenza
-        if src_is_frontline and t_src.armies == 1:
-            # Spostamento grave se svuota una frontiera
-            reward += Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -150)
-            extra_info['left_one_army_src'] = True
-            extra_info['maneuver_suicide'] = True
-        elif not src_is_frontline:
-            # Bonus per svuotamento retrovia (se src non era il fronte)
-            reward += Config.REWARD.get('MANEUVER_FROM_SAFE_ZONE', 40)
-            extra_info['cleared_safe_zone'] = True
-
-        if dest_is_frontline:
-            # Bonus strategico: portiamo truppe al fronte sano
-            # Lo neghiamo se la mossa ha appena svuotato un'altra frontiera!
-            if not extra_info.get('maneuver_suicide'):
-                reward += Config.REWARD.get('MANEUVER_STRATEGIC', 80)
-                extra_info['strategic_move'] = True
-                
-                stack_threshold = Config.REWARD.get('REINFORCE_STACK_THRESHOLD', 0)
-                armies_before = t_dest.armies - amount
-                is_stacked_before = stack_threshold and armies_before >= stack_threshold
-                
-                if not is_stacked_before:
-                    reward += Config.REWARD.get('MANEUVER_STRATEGIC', 80)
-                    extra_info['maneuver_strategic'] = True
-                else:
-                    reward += Config.REWARD.get('MANEUVER_PENALTY', -50)
-                    extra_info['maneuver_strategic_stacked'] = True
-                    excess = t_dest.armies - stack_threshold
-                    reward += Config.REWARD.get('REINFORCE_STACK_PENALTY', -25) * excess
-                    extra_info['stack_penalty'] = True
-                    extra_info['stack_excess'] = excess
-        elif not src_is_frontline:
-            reward += Config.REWARD.get('MANEUVER_CORRECTLY', 10)
-            extra_info['maneuver_safe_to_safe'] = True
-        else:
-            if not extra_info.get('maneuver_suicide'):
-                reward += Config.REWARD.get('MANEUVER_PENALTY', -50)
-            extra_info['maneuver_away_from_front'] = True
-
+        # Bonus strategico: portiamo truppe dalle retrovie al fronte
+        if dest_is_frontline and not src_is_frontline:
+            reward += Config.REWARD.get('MANEUVER_TO_FRONT', 50)
+            extra_info['strategic_move'] = True
+            
         return reward, extra_info
 
     @staticmethod

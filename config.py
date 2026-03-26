@@ -2,7 +2,7 @@ from typing import Dict, Any
 
 class Config:
     # =========================================
-    # 🌍 GAME SETTINGS (Il Mondo Fisico)
+    # GAME SETTINGS
     # =========================================
     GAME: Dict[str, Any] = {
         "NUM_TERRITORIES": 42,
@@ -16,14 +16,12 @@ class Config:
         "STARTING_ARMIES": 1,
         "BONUS_ARMIES_DIVISOR": 3,
         "MIN_BONUS": 1,
-        "MIN_REINFORCE_QTY": 0.05,
-        "MIN_POST_CONQUEST_MOVE": 2,
         "PHASES": ["INITIAL_PLACEMENT", "REINFORCE", "ATTACK", "POST_ATTACK_MOVE", "MANEUVER"],
-        "MAX_ACTIONS_PER_MATCH": 2000, # Limite per evitare loop infiniti
+        "MAX_ACTIONS_PER_MATCH": 3000,
     }
 
     # =========================================
-    # 🗺️ CONTINENTS
+    # CONTINENTS
     # =========================================
     CONTINENTS = {
         "NORTH_AMERICA": {"t_ids": list(range(0, 9)), "bonus": 5},
@@ -35,15 +33,15 @@ class Config:
     }
 
     # =========================================
-    # 📝 TASK da completare per vincere la partita
+    #  TASK da completare per vincere la partita
     # =========================================
     MISSIONS: Dict[str, Dict[str, Any]] = {
-        # --- DOMINATION (Hard & Insane) ---
+        # --- DOMINATION ---
         "DOMINATION_60": {"type": "territory_count", "target": 0.70},
         "DOMINATION_80": {"type": "territory_count", "target": 0.80},
         "TOTAL_CONTROL": {"type": "territory_count", "target": 1.00},
 
-        # --- EMPIRE (Realistiche stile Risiko) ---
+        # --- EMPIRE  ---
         "CONTROL_NA_AU": { "type": "continents", "target": ["NORTH_AMERICA", "OCEANIA"]},
         "CONTROL_EU_SA": { "type": "continents","target": ["EUROPE", "SOUTH_AMERICA"]},
         "CONTROL_AS_SA": { "type": "continents", "target": ["ASIA", "SOUTH_AMERICA"]},
@@ -55,7 +53,7 @@ class Config:
     }
 
     # =========================================
-    # 🧠 NEURAL NETWORK SETTINGS (Il Cervello)
+    # NEURAL NETWORK
     # =========================================
     NN: Dict[str, Any] = {
         "HIDDEN_LAYERS": [256, 128, 128, 64],  # Architettura: 4 strati nascosti
@@ -66,13 +64,15 @@ class Config:
         "ATTACK_DECISION_THRESHOLD": 0.2,
         "MANEUVER_DECISION_THRESHOLD": 0.45,
         "ATTACK_MIN_RATIO": 1.0,
+        "MIN_REINFORCE_QTY": 0.05,
+        "MIN_POST_CONQUEST_MOVE": 2,
     }
 
     # =========================================
-    # 🧬 EVOLUTION SETTINGS (Motore Genetico)
+    # EVOLUTION SETTINGS
     # =========================================
     EVOLUTION: Dict[str, Any] = {
-        "POPULATION_SIZE": 120,       # Quanti agenti per generazione
+        "POPULATION_SIZE": 100,       # Quanti agenti per generazione
         "GENERATIONS": 1000000,       # Quante epoche di evoluzione
         "ELITISM_COUNT": 20,          # I top 20 passano alla prossima gen senza modifiche (immortali)
         "TOURNAMENT_SIZE": 12,         # Da quante persone è composto il torneo
@@ -91,7 +91,7 @@ class Config:
     }
 
     # =========================================
-    # 👤 HUMAN DATASET (Imitation Learning)
+    # HUMAN DATASET (Imitation Learning)
     # =========================================
     HUMAN_DATA: Dict[str, Any] = {
         "ENABLED": True,
@@ -114,53 +114,41 @@ class Config:
     }
 
     # =========================================
-    # 💎 REWARDS
+    # REWARDS
     # =========================================
-    REWARD: Dict[str, int] = {
+    REWARD: Dict[str, float | int] = {
         # --- ESITI PARTITA ---
         "WIN": 10000,
         "LOSS": -8000,
         "STALEMATE_PENALTY": -6000,
-        "ELIMINATE_PLAYER": 2500,
+        "ELIMINATE_PLAYER": 1000,
         "ELIMINATION_PENALTY": -15000,
         # --- RINFORZI ---
         "REINFORCE_SAFE_PENALTY": -50,
-        "REINFORCE_STACK_PENALTY": -25,
-        "REINFORCE_STACK_THRESHOLD": 12,
-        "REINFORCE_REPEAT_PENALTY": -30,
+        "REINFORCE_CHOKEPOINT_BONUS": 15,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 100,
-        "KILL_ENEMY_ARMY": 15,
-        "LOSE_ARMY": -30,
+        "CONQUER_TERRITORY": 50,
+        "CONQUEST_DECAY_FACTOR": 0.65,
+        "CONQUER_CHOKEPOINT_BONUS": 20,
+        "LOSE_ARMY": -20,
         "ATTACK_RISK_PENALTY": -60,
-        "AVOID_RISK_BONUS": 35,
-        "END_PHASE_LEAVE_ONE_PENALTY": -150,
-        "END_PHASE_RISK_PENALTY": -50,
-        "END_PHASE_WEAK_FRONTLINE": -60,
-        "END_PHASE_PENALTY_CAP": -2000,
-        # --- PASSAGGIO TURNO ---
-        "PASS_ATTACK_PENALTY": -40,
-        "PASS_REPEAT_PENALTY": -8,
-        "PASS_PENALTY_CAP": -300,
-        "PASSIVE_TURN_PENALTY": -40,
-        # --- DIFESA / PRESIDIO ---
-        "DEFEND_BONUS": 25,
-        "DEFEND_HOLD_TERRITORY": 70,
-        "FRONTLINE_STABLE_BONUS": 250,
-        "FRONTLINE_FORTIFIED_BONUS": 400,
-        "VALID_SAFE_ACTION_BONUS": 8,
-        # --- MANOVRA ---
-        "MANEUVER_CORRECTLY": 10,
-        "MANEUVER_PENALTY": -80,
-        "MANEUVER_STRATEGIC": 80,
-        "MANEUVER_FROM_SAFE_ZONE": 40,
-        "INTERNAL_ARMY_PENALTY": -15,
         # --- CONTINENTI / CONTROLLO MAPPA ---
-        "HOLD_CONTINENT": 70,
-        "CONQUER_CONTINENT": 120,
+        "CONQUER_CONTINENT": 50,
+        # --- FINE FASE ---
+        "END_PHASE_LEAVE_ONE_PENALTY": -150,
+        # --- PASSAGGIO TURNO ---
+        "PASSIVE_TURN_PENALTY": -40,
+        "PASS_PENALTY_CAP": -1000,
+        # --- DIFESA / PRESIDIO ---
+        "FRONTLINE_GARRISON_BONUS": 20,
+        "END_TURN_WITH_2_GARRISON_ARMY": 30,
+        # --- MANOVRA ---
+        "MANEUVER_TO_FRONT": 50,
+        "MANEUVER_TO_CHOKEPOINT": 20,
+        "INTERNAL_ARMY_PENALTY": -15,
         # --- ERRORI / STALLO / TEMPO ---
         "INVALID_MOVE": -100,
         "INVALID_MOVE_ATTACK": -200,
         "CONSECUTIVE_INVALID_MOVE": -500,
-        "GAME_LENGTH_PENALTY": -8,
+        "GAME_LENGTH_PENALTY": -5,
     }

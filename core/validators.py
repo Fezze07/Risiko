@@ -20,9 +20,9 @@ class ActionValidator:
         if armies_to_place <= 0:
             return False, "Nessuna armata disponibile"
 
-        qty = action.get('qty', 0.0)
-        if qty <= 0 or qty < Config.GAME.get("MIN_REINFORCE_QTY", 0.0):
-            return False, "Quantita' rinforzo troppo bassa"
+        qty = float(action.get("qty", 0.0))
+        if qty <= 0 or qty < Config.NN.get("MIN_REINFORCE_QTY", 0.0):
+            return False, "Quantità rinforzi non valida"
 
         # Check Max Armies (Global Limit)
         current_total = sum(t.armies for t in board.territories.values() if t.owner_id == player_id)
@@ -118,11 +118,10 @@ class ActionValidator:
         if movable < 1:
             return False, "Armate insufficienti per lo spostamento post conquista"
 
-        min_required = min(
-            movable,
-            max(1, Config.GAME.get("MIN_POST_CONQUEST_MOVE", 1))
+        min_move = min(movable, 
+            max(1, Config.NN.get("MIN_POST_CONQUEST_MOVE", 1))
         )
-        if min_required < 1:
+        if min_move < 1: # Changed from min_required to min_move
             return False, "Spostamento post conquista non valido"
 
         return True, ""

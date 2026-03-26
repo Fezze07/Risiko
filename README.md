@@ -14,7 +14,7 @@ Questo progetto implementa un ambiente avanzato di **Reinforcement Learning** pe
 
 1. **Clona la repository**:
     ```bash
-    git clone https://github.com/Fezze07/RisikoReinforcementLearning.git
+    git clone https://github.com/Fezze07/Risiko.git
     cd Risiko
     ```
 

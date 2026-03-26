@@ -7,3 +7,4 @@ __pycache__/
 records.json
 .pytest_cache/
 dataset/
+__skills/

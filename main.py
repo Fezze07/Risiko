@@ -116,12 +116,20 @@ class Main:
             post_attack_reward_sum = 0.0
             maneuver_reward_sum = 0.0
             
-            post_move_high_threat = 0
-            post_move_weak_front = 0
             post_move_count = 0
             total_territories_captured = 0
-            total_frontline_weakness = 0
-            total_end_phase_evals = 0
+            
+            # Generation outcomes
+            total_wins = 0
+            total_losses = 0
+            total_stalemates = 0
+            
+            # New Diagnostics counters
+            total_invalid_moves = 0
+            total_turns_sum = 0
+            total_armies_placed_sum = 0
+            total_timeouts = 0
+            total_eliminations_sum = 0
 
             for res_idx, (fitness_scores, stats) in enumerate(results):
                 player_indices = match_tasks_data[res_idx][1]
@@ -143,13 +151,19 @@ class Main:
                 post_attack_reward_sum += stats.get('post_attack_move_reward_sum', 0.0)
                 maneuver_reward_sum += stats.get('maneuver_reward_sum', 0.0)
                 
-                post_move_high_threat += stats.get('post_move_high_threat', 0)
-                post_move_weak_front += stats.get('post_move_weak_front', 0)
                 post_move_count += stats.get('post_move_count', 0)
-                
                 total_territories_captured += stats.get('territories_captured', 0)
-                total_frontline_weakness += stats.get('frontline_weakness_penalties', 0)
-                total_end_phase_evals += stats.get('end_phase_eval_count', 0)
+                
+                total_wins += stats.get('wins', 0)
+                total_losses += stats.get('losses', 0)
+                total_stalemates += stats.get('stalemates', 0)
+                
+                # New Diagnostics
+                total_invalid_moves += stats.get('invalid_moves', 0)
+                total_turns_sum += stats.get('total_turns', 0)
+                total_armies_placed_sum += stats.get('armies_placed', 0)
+                total_timeouts += stats.get('is_timeout', 0)
+                total_eliminations_sum += stats.get('players_eliminated', 0)
 
             # Normalizzazione fitness per il numero di match giocati
             for agent in population:
@@ -168,11 +182,6 @@ class Main:
             best_agent = max(population, key=lambda x: x.fitness)
             avg_fitness = sum(a.fitness for a in population) / len(population)
 
-            high_threat_pct = 0.0
-            weak_front_pct = 0.0
-            if total_end_phase_evals > 0:
-                high_threat_pct = (post_move_high_threat / total_end_phase_evals) * 100
-                weak_front_pct = (post_move_weak_front / total_end_phase_evals) * 100
 
             reinforce_avg = 0.0
             attack_avg = 0.0
@@ -193,35 +202,28 @@ class Main:
             post_attack_pct = (post_attack_count / total_actions * 100) if total_actions > 0 else 0
             maneuver_pct = (maneuver_count / total_actions * 100) if total_actions > 0 else 0
 
+            # New Diagnostic Averages
+            num_matches = len(results)
+            avg_turns = total_turns_sum / num_matches if num_matches > 0 else 0
+            avg_eliminations = total_eliminations_sum / num_matches if num_matches > 0 else 0
+            reinforce_eff = total_armies_placed_sum / reinforce_count if reinforce_count > 0 else 0
+
             self.evo_manager.save_best_agent('best_agent.pkl')
 
             best_color = Fore.GREEN if best_agent.fitness >= 0 else Fore.RED
             avg_color = Fore.GREEN if avg_fitness >= 0 else Fore.RED
             
-            if high_threat_pct >= 50:
-                risky_color = Fore.RED
-            elif high_threat_pct >= 20:
-                risky_color = Fore.YELLOW
-            else:
-                risky_color = Fore.GREEN
-            
-            if weak_front_pct >= 60:
-                weak_color = Fore.RED
-            elif weak_front_pct >= 30:
-                weak_color = Fore.YELLOW
-            else:
-                weak_color = Fore.GREEN
-
             print(
-                f"GEN {generation + 1} | Best: {best_color}{best_agent.fitness:.2f}{Style.RESET_ALL} "
-                f"| Avg: {avg_color}{avg_fitness:.2f}{Style.RESET_ALL}"
-                f"| Risky: {risky_color}{high_threat_pct:.1f}%{Style.RESET_ALL}"
-                f"| Weak: {weak_color}{weak_front_pct:.1f}%{Style.RESET_ALL} \n"
-                f"| Reinforce avg: {reinforce_avg:.2f} | Attack avg: {attack_avg:.2f} "
-                f"| PostAttack avg: {post_attack_avg:.2f} | Maneuver avg: {maneuver_avg:.2f} \n"
-                f"| Pass: {pass_pct:.1f}% | Rein: {reinforce_pct:.1f}% | Att: {attack_pct:.1f}% "
-                f"| Post: {post_attack_pct:.1f}% | Man: {maneuver_pct:.1f}%\n"
-                f"| Conq: {total_territories_captured} | FrontWeak: {total_frontline_weakness}\n"
+                f"GEN {generation + 1} | Best: {best_color}{best_agent.fitness:.0f}{Style.RESET_ALL} "
+                f"| Avg: {avg_color}{avg_fitness:.0f}{Style.RESET_ALL} "
+                f"| Conq: {total_territories_captured}\n"
+                f"  Outcomes: Wins {total_wins} | Loss {total_losses} | Stale {total_stalemates} "
+                f"(Timeouts: {total_timeouts})\n"
+                f"  Diagnosis: Invalid {total_invalid_moves} | Avg Turns {avg_turns:.1f} "
+                f"| Elims {avg_eliminations:.1f} | ReinEff {reinforce_eff:.2f}\n"
+                f"  Phase Avg: Rein {reinforce_avg:.2f} | Att {attack_avg:.2f} | Man {maneuver_avg:.2f}\n"
+                f"  Actions: Pass {pass_pct:.1f}% | Rein {reinforce_pct:.1f}% | Att {attack_pct:.1f}% "
+                f"| Post {post_attack_pct:.1f}% | Man {maneuver_pct:.1f}%\n"
             )
 
 

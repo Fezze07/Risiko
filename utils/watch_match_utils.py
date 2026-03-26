@@ -14,120 +14,63 @@ class WatchMatchUtils:
 
         reasons = []
 
+        # --- REINFORCE ---
         if action_type == 'REINFORCE':
-            if info.get('continent_held'):
-                reasons.append('Bonus continente')
-            
-            if info.get('continent_held'):
-                reasons.append('Bonus continente')
-            
-            if not info.get('is_frontline'):
-                if info.get('safe_action_bonus'):
-                    reasons.append('Bonus azione sicura')
-                if info.get('reinforce_safe_penalty'):
-                    reasons.append('Malus rinforzo non strategico')
-                if info.get('attack_risk_penalty'):
-                    reasons.append('Malus rischio attacco (interno)')
-            
-            if info.get('stack_penalty'):
-                excess = info.get('stack_excess', '')
-                reasons.append(f'Malus stacking (eccesso: {excess})' if excess else 'Malus stacking')
-            if info.get('repeat_reinforce_penalty'):
-                count = info.get('repeat_reinforce_count', '')
-                reasons.append(f'Malus ripetizione (n.{count})' if count else 'Malus ripetizione')
+            if info.get('reinforce_chokepoint'):
+                reasons.append('Bonus Chokepoint')
+            if info.get('reinforce_safe_penalty'):
+                reasons.append('Penalità interno')
+            if info.get('reinforce_qty'):
+                reasons.append(f"Piazzate {info['reinforce_qty']}")
 
+        # --- ATTACK ---
         elif action_type == 'ATTACK':
             if info.get('conquered'):
-                msg = 'Conquista'
+                msg = 'CONQUISTA'
                 if info.get('continent_complete'):
-                    msg = 'Continente preso'
+                    msg += ' + CONTINENTE'
                 if info.get('continent_lost'):
-                    msg += ' + continente rotto'
-                if info.get('post_attack_move_required'):
-                    msg += ' | scegli spostamento'
+                    msg += ' (rotto nemico)'
                 reasons.append(msg)
-            else:
-                if info.get('defended'):
-                    reasons.append('difesa riuscita')
-                if info.get('risky_attack'):
-                    reasons.append('attacco rischioso')
-                if info.get('left_one_army_src'):
-                    reasons.append('1 armata sorgente')
-                if info.get('avoid_risk'):
-                    reasons.append('evita rischio')
-                if info.get('safe_action_bonus'):
-                    reasons.append('bonus azione sicura')
-                if reward < 0:
-                    reasons.append('persa armata')
-                elif reward > 0:
-                    reasons.append('uccisa armata nemica')
+            
+            if info.get('player_eliminated'):
+                reasons.append('GIOCATORE ELIMINATO')
+                
+            if info.get('risky_attack'):
+                reasons.append('Attacco rischioso')
+            
+            if reward < 0 and not info.get('conquered'):
+                # Perda armate ma senza conquistare
+                reasons.append('esercito perso')
 
+        # --- POST_ATTACK_MOVE ---
         elif action_type == 'POST_ATTACK_MOVE':
             if 'post_attack_move_qty' in info:
                 reasons.append(f"spostate {info['post_attack_move_qty']}")
-            if info.get('risky_attack_conquer'):
-                reasons.append('nuovo territorio rischioso')
-            if info.get('left_one_army_src'):
-                reasons.append('1 armata sorgente')
-            if info.get('left_one_army_dest'):
-                reasons.append('1 armata nuovo territorio')
-            if info.get('avoid_risk'):
-                reasons.append('evita rischio')
-            if info.get('safe_action_bonus'):
-                reasons.append('bonus azione sicura')
-            if info.get('forced_post_attack_move'):
-                reasons.append('forzato')
 
+        # --- MANEUVER ---
         elif action_type == 'MANEUVER':
             if info.get('maneuver_strategic'):
-                reasons.append('Mossa strategica (fronte)')
-            elif info.get('maneuver_strategic_stacked'):
-                reasons.append('Eccesso truppe al fronte (malus)')
-            elif info.get('maneuver_safe_to_safe'):
-                reasons.append('Spostamento interno')
-            elif info.get('maneuver_away_from_front'):
-                reasons.append('Ritirata (malus)')
-            
-            if info.get('stack_penalty'):
-                excess = info.get('stack_excess', '')
-                reasons.append(f'Malus stacking (eccesso: {excess})' if excess else 'Malus stacking')
-            
-            if info.get('left_one_army_src'):
-                reasons.append('1 armata sorgente')
-            if info.get('frontline_stable'):
-                reasons.append('fronte stabile')
-            if info.get('frontline_fortified'):
-                reasons.append('fronte fortificato')
-        
-        # Add global reasons to any action
-        if info.get('safe_action_bonus') and not any('azione sicura' in r.lower() for r in reasons):
-            reasons.append('bonus azione sicura')
-        
-        if info.get('game_length_penalty'):
-            reasons.append('Penalità tempo')
-        
-        # New MANEUVER and PASS specific reasons
-        elif action_type == 'MANEUVER':
-            if info.get('strategic_move'):
-                reasons.append('Spostamento strategico')
-            if info.get('cleared_safe_zone'):
-                reasons.append('Svuotamento retrovia')
-            if info.get('error'):
-                reasons.append(f"ERROR: {info['error']}")
+                reasons.append('Al fronte')
+            if info.get('maneuver_to_chokepoint'):
+                reasons.append('Verso Chokepoint')
+            if info.get('maneuver_away_from_front'):
+                reasons.append('Ritirata')
 
+        # --- PASS ---
         elif action_type == 'PASS':
-            if info.get('repeat_pass_penalty'):
+            if info.get('passive_turn_penalty'):
                 reasons.append('Malus PASS ripetuto')
-            if info.get('error'):
-                reasons.append(f"ERROR: {info['error']}")
 
-        # Penalità armate inattive si applica sia a PASS che MANEUVER a fine turno
+        # --- FINE TURNO (Shared by PASS and MANEUVER) ---
         if action_type in ('PASS', 'MANEUVER'):
+            if info.get('end_phase_left_one'):
+                count = info.get('end_phase_left_one', 0)
+                reasons.append(f'Confine scoperto (x{count})')
+            if info.get('garrison_bonus'):
+                reasons.append('Bonus presidio')
             if info.get('inactive_army_penalty'):
-                count = info.get('inactive_army_count', 0)
-                reasons.append(f'Malus armate inattive (x{count})')
-            if info.get('holding_bonus'):
-                reasons.append('Premio possedimenti')
+                reasons.append('Penalità inattive')
 
         return " | ".join(reasons) if reasons else "OK"
 
