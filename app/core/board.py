@@ -1,8 +1,8 @@
 import random
 from typing import Dict, List, Optional
 from config import Config
-from core.territory import Territory
-from core.world import TERRITORIES
+from app.core.territory import Territory
+from app.core.world import TERRITORIES
 
 class Board:
     def __init__(self, num_players: Optional[int] = None) -> None:

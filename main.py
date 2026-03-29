@@ -5,13 +5,13 @@ import os
 from typing import List, Tuple, Optional
 from colorama import Fore, Style, init
 
-from ai.agent import Agent
-from ai.evolution import EvolutionManager
+from app.ai.agent import Agent
+from app.ai.evolution import EvolutionManager
 from config import Config
-from core.environment import RisikoEnvironment
-from utils.human_dataset import load_samples, compute_imitation_bonus
-from utils.parallel_trainer import run_parallel_match
-from utils.trainer_utils import TrainerUtils
+from app.core.environment import RisikoEnvironment
+from app.utils.human_dataset import load_samples, compute_imitation_bonus
+from app.utils.parallel_trainer import run_parallel_match
+from app.utils.trainer_utils import TrainerUtils
 
 
 def parse_args() -> argparse.Namespace:

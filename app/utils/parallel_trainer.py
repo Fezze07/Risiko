@@ -1,5 +1,5 @@
 from typing import Dict, Any, Tuple
-from core.environment import RisikoEnvironment
+from app.core.environment import RisikoEnvironment
 from config import Config
 
 

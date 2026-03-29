@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-from typing import Dict
 
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse
@@ -11,10 +10,10 @@ PROJECT_ROOT = str(Path(__file__).resolve().parent.parent)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
-from web.sockets import ws_game_handler
-from web.session import game_session
+from app.web.sockets import ws_game_handler
+from app.web.session import game_session
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Dict
 
 app = FastAPI(title="Risiko Web")
 app.add_middleware(

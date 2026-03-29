@@ -2,11 +2,11 @@ import math
 import os
 from typing import Dict, List, Any
 
-from ai.agent import Agent
+from app.ai.agent import Agent
 from config import Config
-from core.environment import RisikoEnvironment
-from core.world import TERRITORIES
-from utils.trainer_utils import TrainerUtils
+from app.core.environment import RisikoEnvironment
+from app.core.world import TERRITORIES
+from app.utils.trainer_utils import TrainerUtils
 
 
 # Carica best_agent.pkl per creare un agente AI.

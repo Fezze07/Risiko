@@ -1,9 +1,9 @@
 import random
 from dataclasses import dataclass
 from enum import Enum, auto
-from typing import List, Dict, Tuple, Optional, Set
+from typing import List, Dict, Tuple, Optional
 from config import Config
-from core.board import Board
+from app.core.board import Board
 
 class CardType(Enum):
     INFANTRY = auto()

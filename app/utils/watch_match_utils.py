@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from core.world import TERRITORIES
+from app.core.world import TERRITORIES
 
 
 class WatchMatchUtils:

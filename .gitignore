@@ -1,7 +1,7 @@
 .venv/
 .idea/
-tests/
 __pycache__/
-*.pyc
-records.json
 .pytest_cache/
+*.pyc
+logs/
+scripts/

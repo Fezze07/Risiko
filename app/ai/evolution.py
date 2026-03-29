@@ -4,10 +4,10 @@ import copy
 import pickle
 import os
 from typing import List
-from ai.agent import Agent
+from app.ai.agent import Agent
 from config import Config
-from utils.trainer_utils import TrainerUtils
-from core.board import Board
+from app.utils.trainer_utils import TrainerUtils
+from app.core.board import Board
 
 
 class EvolutionManager:

@@ -1,5 +1,5 @@
 from typing import Dict, Any, Tuple
-from core.board import Board
+from app.core.board import Board
 from config import Config
 
 class ActionValidator:

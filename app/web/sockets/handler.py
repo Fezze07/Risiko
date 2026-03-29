@@ -6,12 +6,12 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 from fastapi import WebSocket, WebSocketDisconnect
 
-from ai.processor import Processor
+from app.ai.processor import Processor
 from config import Config
-from core.environment import RisikoEnvironment
-from utils.human_dataset import append_sample, encode_action_target
-from utils.watch_match_utils import WatchMatchUtils
-from web.utils import (
+from app.core.environment import RisikoEnvironment
+from app.utils.human_dataset import append_sample, encode_action_target
+from app.utils.watch_match_utils import WatchMatchUtils
+from app.web.utils import (
     build_ai_agent,
     format_mission,
     serialize_board,
@@ -27,7 +27,7 @@ from .constants import (
     MIN_PLAYERS,
 )
 from .helpers import fallback_player_colors, normalize_role
-from web.session import game_session
+from app.web.session import game_session
 
 
 async def ws_game_handler(

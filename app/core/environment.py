@@ -1,15 +1,15 @@
 from typing import Dict, Tuple, Any, Optional
 from config import Config
-from core.board import Board
-from core.task import MissionManager
-from core.validators import ActionValidator
-from core.actions import ActionHandler
-from core.cards import DeckManager, CardManager
-import random
+from app.core.board import Board
+from app.core.task import MissionManager
+from app.core.validators import ActionValidator
+from app.core.actions import ActionHandler
+from app.core.cards import DeckManager, CardManager
+
 
 # Pre-calcolo dei chokepoint (territori con connessioni cross-continente)
 def _build_chokepoint_map():
-    from core.world import TERRITORIES as WORLD_T
+    from app.core.world import TERRITORIES as WORLD_T
     chokepoints = set()
     for t_id, t_data in WORLD_T.items():
         t_continent = t_data.get('continent', '')
@@ -189,20 +189,16 @@ class RisikoEnvironment:
                     reward += exposed * pen
                     info['end_phase_left_one'] = exposed
 
-                # Bonus scalare per ogni territorio di frontiera con almeno 2 armate di presidio (armies > 2)
-                garrisoned_borders_count = sum(
-                    1 for t in self.board.territories.values()
-                    if t.owner_id == player_id and t.armies > 2 and
+                # Bonus se almeno un territorio di frontiera ha più di 2 armate
+                has_garrisoned_border = any(
+                    t.owner_id == player_id and t.armies > 2 and
                     any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
+                    for t in self.board.territories.values()
                 )
-                if garrisoned_borders_count > 0:
-                    base_garrison_bonus = Config.REWARD.get('END_TURN_WITH_2_GARRISON_ARMY', 30)
-                    garrison_bonus = base_garrison_bonus * garrisoned_borders_count
+                if has_garrisoned_border:
+                    garrison_bonus = Config.REWARD.get('END_TURN_WITH_2_GARRISON_ARMY', 30)
                     reward += garrison_bonus
                     info['garrison_bonus'] = garrison_bonus
-
-                # Penalità truppe inattive applicate a fine turno (anche se si passa senza manovrare)
-                reward += self._get_inactive_army_penalty(player_id, info)
 
                 self._end_turn()
             elif self.current_phase == 'POST_ATTACK_MOVE':
@@ -348,6 +344,8 @@ class RisikoEnvironment:
         elif self.current_phase == 'MANEUVER':
             if action.get('type') == 'PASS':
                 info['action'] = 'Pass in MANEUVER phase'
+                # ... (rest of pass logic)
+                # Note: The pass logic is handled earlier in the 'if action[type] == PASS' block
                 pass 
 
             # Assicuriamoci che se l'IA decide di manovrare, sposti almeno 1 armata
@@ -402,34 +400,22 @@ class RisikoEnvironment:
         return self._finalize_step(reward, done, info, player_id, action)
 
     def _finalize_step(self, reward: float, done: bool, info: Dict[str, Any], player_id: int, action: Dict[str, Any]) -> Tuple[float, bool, Dict[str, Any]]:
-        lp_base = float(Config.REWARD.get('GAME_LENGTH_PENALTY', -10))
-        is_optional_action = action.get('type') in ('ATTACK', 'MANEUVER')
-        if lp_base != 0 and is_optional_action:
-            current_round = max(1, (self.current_turn + self.num_players - 1) // self.num_players)
-            lp = lp_base * (current_round / 100.0)
+        lp = Config.REWARD.get('GAME_LENGTH_PENALTY', -10)
+        is_attack_action = action.get('type') == 'ATTACK'
+        if lp != 0 and is_attack_action:
             reward += lp
             info['game_length_penalty'] = lp
-
         winner, _ = self.is_game_over()
         if winner != 0:
             done = True
-            if winner == player_id: 
-                reward += Config.REWARD.get('WIN', 10000)
-            elif winner == -1: 
-                base_stalemate = float(Config.REWARD.get('STALEMATE_PENALTY', -8000))
-                player_territories = len(self.board.get_player_territories(player_id))
-                total_territories = len(self.board.territories)
-                perc = player_territories / total_territories if total_territories > 0 else 0.0
-                penalty = base_stalemate * perc
-                reward += penalty
-                info['stalemate_penalty'] = penalty
-            else: 
-                reward += Config.REWARD.get('LOSS', -8000)
+            if winner == player_id: reward += Config.REWARD.get('WIN', 7000)
+            elif winner == -1: reward += Config.REWARD.get('STALEMATE_PENALTY', -6000)
+            else: reward += Config.REWARD.get('LOSS', -8000)
         return float(reward), done, info
 
-    def _handle_invalid_move(self, err_msg: str, info: Dict[str, Any]) -> Tuple[float, bool, Dict[str, Any]]:
+    def _handle_invalid_move(self, err_msg: str, info: Dict[str, Any]) -> Tuple[int, bool, Dict[str, Any]]:
         self.consecutive_invalid_moves += 1
-        reward = float(Config.REWARD.get('INVALID_MOVE', -30))
+        reward = Config.REWARD.get('INVALID_MOVE_ATTACK', -200) if self.current_phase in ('ATTACK', 'POST_ATTACK_MOVE') else Config.REWARD.get('INVALID_MOVE', -100)
         if self.consecutive_invalid_moves >= 10:
             reward, self.consecutive_invalid_moves = Config.REWARD.get('CONSECUTIVE_INVALID_MOVE', -500), 0
             info['error'] = f"TROPPI ERRORI ({self.consecutive_invalid_moves}): {err_msg}. Turno gestito forzatamente."
@@ -456,7 +442,7 @@ class RisikoEnvironment:
         stable_count = 0
         garrison_bonus = float(Config.REWARD.get('FRONTLINE_GARRISON_BONUS', 20))
         for t in frontline:
-            if t.armies > 2:
+            if t.armies >= 2:
                 bonus += garrison_bonus
                 stable_count += 1
         if stable_count > 0:
@@ -465,35 +451,20 @@ class RisikoEnvironment:
 
     def _get_inactive_army_penalty(self, player_id: int, info: Dict[str, Any]) -> float:
         penalty_per_army = float(Config.REWARD.get('INTERNAL_ARMY_PENALTY', -15))
-        heavy_threshold = int(Config.REWARD.get('INTERNAL_ARMY_HEAVY_THRESHOLD', 8))
         total_penalty = 0.0
         inactive_count = 0
-        penalized_names = []
-
+        
         for t in self.board.territories.values():
             if t.owner_id == player_id:
-                # Un territorio è di frontiera se confina con un nemico (o territorio neutro)
                 is_frontline = any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
-                
-                # SE È FRONTIERA: Esente da penalità inattive
-                if is_frontline:
-                    continue
-
-                if t.armies > 1:
+                if not is_frontline and t.armies > 1:
                     inactive_armies = t.armies - 1
+                    total_penalty += inactive_armies * penalty_per_army
                     inactive_count += inactive_armies
-                    penalized_names.append(f"{t.name} (x{inactive_armies})")
-                    
-                    # Penalità progressiva: sotto soglia costo base, sopra soglia costo doppio
-                    normal_armies = min(inactive_armies, heavy_threshold)
-                    heavy_armies = max(0, inactive_armies - heavy_threshold)
-                    total_penalty += normal_armies * penalty_per_army
-                    total_penalty += heavy_armies * penalty_per_army * 2.0
-
+        
         if total_penalty != 0:
             info['inactive_army_penalty'] = total_penalty
             info['inactive_army_count'] = inactive_count
-            info['inactive_details'] = ", ".join(penalized_names)
         return total_penalty
 
     def _get_available_bonus(self, player_id: int) -> int:

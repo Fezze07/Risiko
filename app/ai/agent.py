@@ -1,7 +1,7 @@
-from ai.network import NeuralNetwork
-from ai.processor import Processor
+from app.ai.network import NeuralNetwork
+from app.ai.processor import Processor
 from config import Config
-from core.board import Board
+from app.core.board import Board
 import random
 from typing import Dict, Any, Optional
 

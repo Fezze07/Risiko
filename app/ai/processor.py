@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Dict, List, Any, Optional
 
-from core.board import Board
+from app.core.board import Board
 from config import Config
 
 
@@ -25,7 +25,7 @@ class Processor:
                 self._territory_continent[t_id] = c_norm
 
         # Pre-calcolo Gateway, Chokepoint e Centralità
-        from core.world import TERRITORIES as WORLD_T
+        from app.core.world import TERRITORIES as WORLD_T
         self._gateway_score = {}  # Connettività cross-continente
         self._chokepoint_score = {} # Nodo di transito critico (degree centrality)
         

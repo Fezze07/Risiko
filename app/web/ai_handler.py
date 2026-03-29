@@ -3,10 +3,10 @@ from typing import Dict, List, Any, Optional
 
 from fastapi import WebSocket
 
-from ai.processor import Processor
-from core.environment import RisikoEnvironment
-from utils.watch_match_utils import WatchMatchUtils
-from web.utils import serialize_board
+from app.ai.processor import Processor
+from app.core.environment import RisikoEnvironment
+from app.utils.watch_match_utils import WatchMatchUtils
+from app.web.utils import serialize_board
 
 
 def build_player_stats(
