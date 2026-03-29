@@ -7,8 +7,8 @@ from utils.dice import get_random_dice
 class ActionHandler:
 
     # Esegue le azioni di gioco (logica e aggiornamento stato board)
-    def __init__(self, max_armies: int):
-        self.max_armies = max_armies
+    def __init__(self):
+        pass
 
     def execute_reinforce(
         self,
@@ -24,8 +24,7 @@ class ActionHandler:
             return Config.REWARD['INVALID_MOVE'], 0, {}
 
         to_add = max(1, int(armies_to_place * qty))
-        space_in_territory = self.max_armies - t_dest.armies
-        to_add = min(to_add, armies_to_place, space_in_territory)
+        to_add = min(to_add, armies_to_place)
 
         if to_add <= 0:
             return Config.REWARD['INVALID_MOVE'], 0, {}
@@ -48,8 +47,12 @@ class ActionHandler:
 
         if not is_frontline:
             if has_frontline_any:
-                reward += Config.REWARD.get('REINFORCE_SAFE_PENALTY', -50)
-                extra_info['reinforce_safe_penalty'] = True
+                # Penalità scalare: base + costo per ogni armata piazzata in zona sicura
+                base_pen = Config.REWARD.get('REINFORCE_SAFE_PENALTY', -50)
+                per_army = Config.REWARD.get('REINFORCE_SAFE_PENALTY_PER_ARMY', -3)
+                penalty = base_pen + (to_add * per_army)
+                reward += penalty
+                extra_info['reinforce_safe_penalty'] = round(penalty, 2)
 
 
         return reward, to_add, extra_info
@@ -211,12 +214,23 @@ class ActionHandler:
         }
 
         reward = 0
-        
-        # Bonus strategico: portiamo truppe dalle retrovie al fronte
+
+        # Conta vicini nemici per src e dest (proxy della "distanza dal fronte")
+        src_enemy_neighbors = sum(1 for n in t_src.neighbors if board.territories[n].owner_id not in (None, player_id))
+        dest_enemy_neighbors = sum(1 for n in t_dest.neighbors if board.territories[n].owner_id not in (None, player_id))
+
         if dest_is_frontline and not src_is_frontline:
-            reward += Config.REWARD.get('MANEUVER_TO_FRONT', 50)
+            # Retrovie -> Fronte: bonus base + proporzionale alla massa spostata
+            base = Config.REWARD.get('MANEUVER_TO_FRONT_BASE', 10)
+            per_army = Config.REWARD.get('MANEUVER_TO_FRONT_PER_ARMY', 4)
+            reward += base + amount * per_army
             extra_info['strategic_move'] = True
-            
+        elif not src_is_frontline and not dest_is_frontline and dest_enemy_neighbors > src_enemy_neighbors:
+            # Retrovie -> Ancora retrovie ma più vicino al fronte
+            proximity_bonus = Config.REWARD.get('MANEUVER_PROXIMITY_BONUS', 5)
+            reward += proximity_bonus * (dest_enemy_neighbors - src_enemy_neighbors)
+            extra_info['proximity_move'] = True
+
         return reward, extra_info
 
     @staticmethod

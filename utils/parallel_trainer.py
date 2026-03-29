@@ -33,8 +33,8 @@ def _init_phase_stats() -> Dict[str, float | int]:
     stats['invalid_moves'] = 0
     stats['total_turns'] = 0
     stats['armies_placed'] = 0
-    stats['is_timeout'] = 0
     stats['players_eliminated'] = 0
+    stats['inactive_penalties_sum'] = 0.0
     
     return stats
 
@@ -61,10 +61,9 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, float], Dict[st
     }
     stats.update(_init_phase_stats())
 
-    # Limite massimo di azioni per evitare loop infiniti, ma molto più alto di MAX_TURNS 
-    # per permettere di raggiungere effettivamente lo stallo o la vittoria.
-    max_actions = Config.GAME.get('MAX_ACTIONS_PER_MATCH', 10000)
-    for _ in range(max_actions):
+    # La partita termina solo quando l'environment segnala done (MAX_TURNS o vittoria)
+    # oppure se un giocatore fa 10 errori consecutivi.
+    while True:
         curr_p = env.player_turn
         phase = env.current_phase
         
@@ -92,20 +91,14 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, float], Dict[st
             stats['territories_captured'] += 1
 
         if 'error' in info:
-            consecutive_errors[curr_p] += 1
             stats['invalid_moves'] += 1
-        else:
-            consecutive_errors[curr_p] = 0
-            
-        # Tracciamento armate piazzate per efficienza (chiave corretta: 'reinforce_qty')
+
         if action_type == 'reinforce':
             stats['armies_placed'] += info.get('reinforce_qty', 0)
-
-        if consecutive_errors[curr_p] >= 10:
-            fitness_map[curr_p] += Config.REWARD['CONSECUTIVE_INVALID_MOVE']
-            # Opzionale: potremmo chiudere il match se un player è bloccato
-            break
-
+            
+        if info.get('inactive_army_penalty'):
+            stats['inactive_penalties_sum'] += info.get('inactive_army_penalty', 0.0)
+            
         fitness_map[curr_p] += reward
 
         # Gestione reward avversario
@@ -124,7 +117,6 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, float], Dict[st
     # Se il loop è finito senza un vincitore reale o uno stallo temporale, lo forziamo a stallo (Timeout Azioni)
     if winner == 0:
         winner = -1
-        stats['is_timeout'] = 1
     
     stats['total_turns'] = env.current_turn
     # Conta quanti territori hanno owner_id != 0 per capire quanti sono vivi

@@ -37,13 +37,12 @@ class RisikoEnvironment:
         self.armies_to_place_total: int = 0
         self.initial_placement_total: int = 0
         self.initial_placement_step: int = 0
-        self.max_armies: int = Config.GAME['MAX_ARMIES_PER_TERRITORY']
         self.setup_placed: Dict[int, int] = {}
         self.player_missions: Dict[int, Dict[str, Any]] = {}
         self.consecutive_invalid_moves = 0
         self.pending_attack_src: Optional[int] = None
         self.pending_attack_dest: Optional[int] = None
-        self.action_handler = ActionHandler(self.max_armies)
+        self.action_handler = ActionHandler()
         self.progress_cache: Dict[int, int] = {}
         self.repeat_reinforce: Dict[int, Dict[str, Any]] = {}
         self.repeat_pass: Dict[int, int] = {}
@@ -68,7 +67,7 @@ class RisikoEnvironment:
         return self.player_missions.get(player_id, {})
 
     def _has_reinforce_space(self, player_id: int) -> bool:
-        return any(t.owner_id == player_id and t.armies < self.max_armies for t in self.board.territories.values())
+        return any(t.owner_id == player_id for t in self.board.territories.values())
 
     def _compute_initial_placement(self) -> None:
         num_territories = getattr(self.board, "n", 42)
@@ -108,6 +107,7 @@ class RisikoEnvironment:
         self.moved_from_territories: set = set()
         self.conquests_this_turn: Dict[int, int] = {p_id: 0 for p_id in self._player_ids()}
         self._continent_reward_given = False
+        self.chokepoint_bonus_given: set = set()  # (player_id, territory_id) già premiati questo rinforzo
         return self.board
 
     def step(self, action: Dict[str, Any], player_id: int) -> Tuple[float, bool, Dict[str, Any]]:
@@ -125,16 +125,20 @@ class RisikoEnvironment:
                 if action.get('qty', 0.0) * self.armies_to_place < 1.0:
                     action['qty'] = 1.0 / self.armies_to_place
 
-            is_valid, err_msg = ActionValidator.validate_reinforce(self.board, player_id, action, self.armies_to_place, self.max_armies)
+            is_valid, err_msg = ActionValidator.validate_reinforce(self.board, player_id, action, self.armies_to_place)
             if not is_valid: return self._handle_invalid_move(err_msg, info)
 
             reward, placed, a_extra = self.action_handler.execute_reinforce(self.board, player_id, action, self.armies_to_place)
             info.update(a_extra)
             
-            # Bonus Chokepoint
-            if action.get('dest') in _CHOKEPOINT_IDS:
-                reward += Config.REWARD.get('REINFORCE_CHOKEPOINT_BONUS', 15)
-                info['reinforce_chokepoint'] = True
+            # Bonus Chokepoint: solo UNA volta per territorio per turno di rinforzo
+            dest_id = action.get('dest')
+            if dest_id in _CHOKEPOINT_IDS:
+                bonus_key = (player_id, dest_id)
+                if bonus_key not in self.chokepoint_bonus_given:
+                    reward += Config.REWARD.get('REINFORCE_CHOKEPOINT_BONUS', 15)
+                    info['reinforce_chokepoint'] = True
+                    self.chokepoint_bonus_given.add(bonus_key)
                 
             self.armies_to_place -= placed
             self.setup_placed[player_id] += placed
@@ -185,16 +189,20 @@ class RisikoEnvironment:
                     reward += exposed * pen
                     info['end_phase_left_one'] = exposed
 
-                # Bonus se almeno un territorio di frontiera ha più di 2 armate
-                has_garrisoned_border = any(
-                    t.owner_id == player_id and t.armies > 2 and
+                # Bonus scalare per ogni territorio di frontiera con almeno 2 armate di presidio (armies > 2)
+                garrisoned_borders_count = sum(
+                    1 for t in self.board.territories.values()
+                    if t.owner_id == player_id and t.armies > 2 and
                     any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
-                    for t in self.board.territories.values()
                 )
-                if has_garrisoned_border:
-                    garrison_bonus = Config.REWARD.get('END_TURN_WITH_2_GARRISON_ARMY', 30)
+                if garrisoned_borders_count > 0:
+                    base_garrison_bonus = Config.REWARD.get('END_TURN_WITH_2_GARRISON_ARMY', 30)
+                    garrison_bonus = base_garrison_bonus * garrisoned_borders_count
                     reward += garrison_bonus
                     info['garrison_bonus'] = garrison_bonus
+
+                # Penalità truppe inattive applicate a fine turno (anche se si passa senza manovrare)
+                reward += self._get_inactive_army_penalty(player_id, info)
 
                 self._end_turn()
             elif self.current_phase == 'POST_ATTACK_MOVE':
@@ -239,25 +247,7 @@ class RisikoEnvironment:
             if self.armies_to_place > 0:
                 t_dest_in = self.board.territories.get(action.get('dest'))
                 
-                # Caso critico: Territorio già pieno (30)
-                if t_dest_in and t_dest_in.armies >= self.max_armies:
-                    # TENTATIVO DI REINDIRIZZAMENTO AUTOMATICO (per non bloccare l'addestramento)
-                    # Cerchiamo un territorio di frontline che non sia pieno
-                    fallbacks = [t for tid, t in self.board.territories.items() if t.owner_id == player_id and t.armies < self.max_armies]
-                    if fallbacks:
-                        # Priorità: frontline con minaccia nemica
-                        fronts = [t for t in fallbacks if any(self.board.territories[n].owner_id != player_id for n in t.neighbors)]
-                        target_fallback = random.choice(fronts) if fronts else random.choice(fallbacks)
-                        action['dest'] = target_fallback.id
-                        info['auto_redirected'] = True
-                        reward += Config.REWARD.get('INVALID_MOVE', -100) // 10 # Penalità minima simbolica
-                    else:
-                        return self._handle_invalid_move('Tutti i territori sono pieni', info)
-
                 t_dest = self.board.territories.get(action.get('dest'))
-                space_left = self.max_armies - t_dest.armies if t_dest else self.max_armies
-                space_left = max(0, space_left)
-
                 # Usa armies_to_place_total per calcolare la quantità minima per avere 1 armata
                 min_qty = 1.0 / self.armies_to_place_total
                 if action.get('qty', 0.0) < min_qty:
@@ -265,10 +255,10 @@ class RisikoEnvironment:
                 
                 req = max(1, int(self.armies_to_place_total * action.get('qty', 0.0)))
                 # Cap basato sia su truppe disponibili che su spazio rimasto nel territorio
-                req = min(req, self.armies_to_place, space_left)
+                req = min(req, self.armies_to_place)
                 action['qty'] = min(1.0, req / self.armies_to_place) if self.armies_to_place > 0 else 0.0
 
-            is_valid, err_msg = ActionValidator.validate_reinforce(self.board, player_id, action, self.armies_to_place, self.max_armies)
+            is_valid, err_msg = ActionValidator.validate_reinforce(self.board, player_id, action, self.armies_to_place)
             if not is_valid: return self._handle_invalid_move(err_msg, info)
             
             self.consecutive_invalid_moves = 0
@@ -277,10 +267,13 @@ class RisikoEnvironment:
             reward += r_r
             info.update(e_r)
             
-            # Bonus Chokepoint
+            # Bonus Chokepoint: solo UNA volta per territorio per turno di rinforzo
             if action.get('dest') in _CHOKEPOINT_IDS:
-                reward += Config.REWARD.get('REINFORCE_CHOKEPOINT_BONUS', 15)
-                info['reinforce_chokepoint'] = True
+                bonus_key = (player_id, action.get('dest'))
+                if bonus_key not in self.chokepoint_bonus_given:
+                    reward += Config.REWARD.get('REINFORCE_CHOKEPOINT_BONUS', 15)
+                    info['reinforce_chokepoint'] = True
+                    self.chokepoint_bonus_given.add(bonus_key)
                 
             self.armies_to_place -= placed
             if placed > 0: self.repeat_pass[player_id] = 0
@@ -335,17 +328,8 @@ class RisikoEnvironment:
             self.repeat_pass[player_id] = 0
             if self.pending_attack_src is None: return self._handle_invalid_move('Stato post conquista non valido', info)
             
-            # Cap preventivo per MAX_ARMIES
             t_src = self.board.territories.get(self.pending_attack_src)
             t_dest = self.board.territories.get(self.pending_attack_dest)
-            if t_src and t_dest:
-                space_left = self.max_armies - t_dest.armies
-                movable = t_src.armies - 1
-                if movable > space_left:
-                    # Ricalcoliamo qty per non superare il limite
-                    max_qty = space_left / movable if movable > 0 else 0.0
-                    if action.get('qty', 1.0) > max_qty:
-                        action['qty'] = max_qty
 
             action['src'], action['dest'] = self.pending_attack_src, self.pending_attack_dest
             is_valid, err_msg = ActionValidator.validate_post_attack_move(self.board, player_id, action['src'], action['dest'])
@@ -364,8 +348,6 @@ class RisikoEnvironment:
         elif self.current_phase == 'MANEUVER':
             if action.get('type') == 'PASS':
                 info['action'] = 'Pass in MANEUVER phase'
-                # ... (rest of pass logic)
-                # Note: The pass logic is handled earlier in the 'if action[type] == PASS' block
                 pass 
 
             # Assicuriamoci che se l'IA decide di manovrare, sposti almeno 1 armata
@@ -373,25 +355,13 @@ class RisikoEnvironment:
             t_dest = self.board.territories.get(action.get('dest'))
             
             if t_src and t_dest and t_src.armies > 1:
-                space_left = self.max_armies - t_dest.armies
-                if space_left <= 0:
-                    # FALLBACK: Se il target è pieno, trasformiamo in un PASS per evitare penalità
-                    info['maneuver_target_full'] = True
-                    action['type'] = 'PASS'
-                    # Saltiamo al blocco del PASS rieseguendolo logicamente
-                    return self.step(action, player_id)
-
                 movable = t_src.armies - 1
-                # Cap preventivo basato su spazio rimasto nel target
-                max_qty = space_left / movable if movable > 0 else 0.0
-                if action.get('qty', 0.0) > max_qty:
-                    action['qty'] = max_qty
                 
-                # Minimo 1 armata (se c'è spazio)
-                if action.get('qty', 0.0) * movable < 1.0 and space_left >= 1:
+                # Minimo 1 armata
+                if action.get('qty', 0.0) * movable < 1.0:
                     action['qty'] = 1.0 / movable if movable > 0 else 0.0
             
-            is_valid, err_msg = ActionValidator.validate_maneuver(self.board, player_id, action, self.max_armies)
+            is_valid, err_msg = ActionValidator.validate_maneuver(self.board, player_id, action)
             if not is_valid: return self._handle_invalid_move(err_msg, info)
             self.repeat_pass[player_id], self.consecutive_invalid_moves = 0, 0
             m_r, m_e = self.action_handler.execute_maneuver(self.board, player_id, action)
@@ -432,22 +402,34 @@ class RisikoEnvironment:
         return self._finalize_step(reward, done, info, player_id, action)
 
     def _finalize_step(self, reward: float, done: bool, info: Dict[str, Any], player_id: int, action: Dict[str, Any]) -> Tuple[float, bool, Dict[str, Any]]:
-        lp = Config.REWARD.get('GAME_LENGTH_PENALTY', -10)
-        is_attack_action = action.get('type') == 'ATTACK'
-        if lp != 0 and is_attack_action:
+        lp_base = float(Config.REWARD.get('GAME_LENGTH_PENALTY', -10))
+        is_optional_action = action.get('type') in ('ATTACK', 'MANEUVER')
+        if lp_base != 0 and is_optional_action:
+            current_round = max(1, (self.current_turn + self.num_players - 1) // self.num_players)
+            lp = lp_base * (current_round / 100.0)
             reward += lp
             info['game_length_penalty'] = lp
+
         winner, _ = self.is_game_over()
         if winner != 0:
             done = True
-            if winner == player_id: reward += Config.REWARD.get('WIN', 7000)
-            elif winner == -1: reward += Config.REWARD.get('STALEMATE_PENALTY', -6000)
-            else: reward += Config.REWARD.get('LOSS', -8000)
+            if winner == player_id: 
+                reward += Config.REWARD.get('WIN', 10000)
+            elif winner == -1: 
+                base_stalemate = float(Config.REWARD.get('STALEMATE_PENALTY', -8000))
+                player_territories = len(self.board.get_player_territories(player_id))
+                total_territories = len(self.board.territories)
+                perc = player_territories / total_territories if total_territories > 0 else 0.0
+                penalty = base_stalemate * perc
+                reward += penalty
+                info['stalemate_penalty'] = penalty
+            else: 
+                reward += Config.REWARD.get('LOSS', -8000)
         return float(reward), done, info
 
-    def _handle_invalid_move(self, err_msg: str, info: Dict[str, Any]) -> Tuple[int, bool, Dict[str, Any]]:
+    def _handle_invalid_move(self, err_msg: str, info: Dict[str, Any]) -> Tuple[float, bool, Dict[str, Any]]:
         self.consecutive_invalid_moves += 1
-        reward = Config.REWARD.get('INVALID_MOVE_ATTACK', -200) if self.current_phase in ('ATTACK', 'POST_ATTACK_MOVE') else Config.REWARD.get('INVALID_MOVE', -100)
+        reward = float(Config.REWARD.get('INVALID_MOVE', -30))
         if self.consecutive_invalid_moves >= 10:
             reward, self.consecutive_invalid_moves = Config.REWARD.get('CONSECUTIVE_INVALID_MOVE', -500), 0
             info['error'] = f"TROPPI ERRORI ({self.consecutive_invalid_moves}): {err_msg}. Turno gestito forzatamente."
@@ -474,7 +456,7 @@ class RisikoEnvironment:
         stable_count = 0
         garrison_bonus = float(Config.REWARD.get('FRONTLINE_GARRISON_BONUS', 20))
         for t in frontline:
-            if t.armies >= 2:
+            if t.armies > 2:
                 bonus += garrison_bonus
                 stable_count += 1
         if stable_count > 0:
@@ -483,23 +465,36 @@ class RisikoEnvironment:
 
     def _get_inactive_army_penalty(self, player_id: int, info: Dict[str, Any]) -> float:
         penalty_per_army = float(Config.REWARD.get('INTERNAL_ARMY_PENALTY', -15))
+        heavy_threshold = int(Config.REWARD.get('INTERNAL_ARMY_HEAVY_THRESHOLD', 8))
         total_penalty = 0.0
         inactive_count = 0
-        
+        penalized_names = []
+
         for t in self.board.territories.values():
             if t.owner_id == player_id:
+                # Un territorio è di frontiera se confina con un nemico (o territorio neutro)
                 is_frontline = any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
-                if not is_frontline and t.armies > 1:
+                
+                # SE È FRONTIERA: Esente da penalità inattive
+                if is_frontline:
+                    continue
+
+                if t.armies > 1:
                     inactive_armies = t.armies - 1
-                    total_penalty += inactive_armies * penalty_per_army
                     inactive_count += inactive_armies
-        
+                    penalized_names.append(f"{t.name} (x{inactive_armies})")
+                    
+                    # Penalità progressiva: sotto soglia costo base, sopra soglia costo doppio
+                    normal_armies = min(inactive_armies, heavy_threshold)
+                    heavy_armies = max(0, inactive_armies - heavy_threshold)
+                    total_penalty += normal_armies * penalty_per_army
+                    total_penalty += heavy_armies * penalty_per_army * 2.0
+
         if total_penalty != 0:
             info['inactive_army_penalty'] = total_penalty
             info['inactive_army_count'] = inactive_count
+            info['inactive_details'] = ", ".join(penalized_names)
         return total_penalty
-
-
 
     def _get_available_bonus(self, player_id: int) -> int:
         lands = len(self.board.get_player_territories(player_id))
@@ -522,6 +517,8 @@ class RisikoEnvironment:
         self.current_phase = 'REINFORCE'
         self.armies_to_place = max(0, self.armies_to_place) + self._get_available_bonus(player_id)
         self.armies_to_place_total, self.has_reinforced = self.armies_to_place, True
+        # Resetta il set dei chokepoint già premiati per il nuovo turno di rinforzo
+        self.chokepoint_bonus_given = set()
         if self.armies_to_place <= 0 or not self._has_reinforce_space(player_id):
             self.armies_to_place, self.current_phase = 0, 'ATTACK'
 

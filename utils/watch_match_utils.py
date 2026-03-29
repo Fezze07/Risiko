@@ -70,7 +70,11 @@ class WatchMatchUtils:
             if info.get('garrison_bonus'):
                 reasons.append('Bonus presidio')
             if info.get('inactive_army_penalty'):
-                reasons.append('Penalità inattive')
+                details = info.get('inactive_details', '')
+                if details:
+                    reasons.append(f'Penalità inattive: {details}')
+                else:
+                    reasons.append('Penalità inattive')
 
         return " | ".join(reasons) if reasons else "OK"
 

@@ -176,7 +176,7 @@ async def ws_game_handler(
             "scores": {str(k): int(v) for k, v in player_scores.items()},
             "armies_to_place": env.armies_to_place,
             "action_log": action_log[-30:],
-            "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
+            "max_armies": Config.GAME.get("MAX_TOTAL_ARMIES", 100),
         }
         if extra_info:
             payload["extra"] = extra_info
@@ -488,7 +488,7 @@ async def ws_game_handler(
                 "armies_to_place": env.armies_to_place,
                 "scores": {str(k): int(v) for k, v in player_scores.items()},
                 "max_turns": Config.GAME["MAX_TURNS"],
-                "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
+                "max_armies": Config.GAME.get("MAX_TOTAL_ARMIES", 100),
             }
         )
 
@@ -564,7 +564,7 @@ async def ws_game_handler(
             "delay_bounds": {"min_ms": MIN_DELAY_MS, "max_ms": MAX_DELAY_MS},
             "num_players": num_players,
             "player_map": default_map,
-            "max_armies": Config.GAME["MAX_ARMIES_PER_TERRITORY"],
+            "max_armies": Config.GAME.get("MAX_TOTAL_ARMIES", 100),
         }
     )
 

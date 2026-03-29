@@ -6,18 +6,16 @@ class Config:
     # =========================================
     GAME: Dict[str, Any] = {
         "NUM_TERRITORIES": 42,
-        "MAX_TURNS": 300,
+        "MAX_TURNS": 400,
         "NUM_PLAYERS": 5,
         "INITIAL_PLACEMENT_ARMIES_PER_TERRITORY": 1.5,
         "INITIAL_PLACEMENT_STEP_DIVISOR": 4,
-        "MAX_ARMIES_PER_TERRITORY": 50,
-        "RISK_RATIO": 2.2,
+        "RISK_RATIO": 1.9,
         "MAX_TOTAL_ARMIES": 110,
         "STARTING_ARMIES": 1,
         "BONUS_ARMIES_DIVISOR": 3,
         "MIN_BONUS": 1,
         "PHASES": ["INITIAL_PLACEMENT", "REINFORCE", "ATTACK", "POST_ATTACK_MOVE", "MANEUVER"],
-        "MAX_ACTIONS_PER_MATCH": 3000,
     }
 
     # =========================================
@@ -120,35 +118,38 @@ class Config:
         # --- ESITI PARTITA ---
         "WIN": 10000,
         "LOSS": -8000,
-        "STALEMATE_PENALTY": -6000,
-        "ELIMINATE_PLAYER": 1000,
+        "STALEMATE_PENALTY": -12000,
+        "ELIMINATE_PLAYER": 2000,
         "ELIMINATION_PENALTY": -15000,
         # --- RINFORZI ---
-        "REINFORCE_SAFE_PENALTY": -50,
+        "REINFORCE_SAFE_PENALTY": -15,          # Penalità base
+        "REINFORCE_SAFE_PENALTY_PER_ARMY": -3,  # Penalità aggiuntiva PER OGNI armata piazzata in zona sicura
         "REINFORCE_CHOKEPOINT_BONUS": 15,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 50,
+        "CONQUER_TERRITORY": 70,
         "CONQUEST_DECAY_FACTOR": 0.65,
-        "CONQUER_CHOKEPOINT_BONUS": 20,
-        "LOSE_ARMY": -20,
-        "ATTACK_RISK_PENALTY": -60,
+        "CONQUER_CHOKEPOINT_BONUS": 30,
+        "LOSE_ARMY": -15,
+        "ATTACK_RISK_PENALTY": -30,
         # --- CONTINENTI / CONTROLLO MAPPA ---
-        "CONQUER_CONTINENT": 50,
+        "CONQUER_CONTINENT": 60,
         # --- FINE FASE ---
         "END_PHASE_LEAVE_ONE_PENALTY": -150,
         # --- PASSAGGIO TURNO ---
-        "PASSIVE_TURN_PENALTY": -40,
-        "PASS_PENALTY_CAP": -1000,
+        "PASSIVE_TURN_PENALTY": -100,
+        "PASS_PENALTY_CAP": -10000,
         # --- DIFESA / PRESIDIO ---
         "FRONTLINE_GARRISON_BONUS": 20,
         "END_TURN_WITH_2_GARRISON_ARMY": 30,
         # --- MANOVRA ---
-        "MANEUVER_TO_FRONT": 50,
+        "MANEUVER_TO_FRONT_BASE": 10,
+        "MANEUVER_TO_FRONT_PER_ARMY": 4,     # Reward aggiuntivo PER OGNI armata spostata al fronte
+        "MANEUVER_PROXIMITY_BONUS": 5,        # Bonus gradiente: ci si avvicina al fronte da interne
         "MANEUVER_TO_CHOKEPOINT": 20,
-        "INTERNAL_ARMY_PENALTY": -15,
+        "INTERNAL_ARMY_PENALTY": -15,         # Penalità base per armata inattiva nelle retrovie
+        "INTERNAL_ARMY_HEAVY_THRESHOLD": 5,   # Oltre questo numero, penalità x2 per armata extra
         # --- ERRORI / STALLO / TEMPO ---
-        "INVALID_MOVE": -100,
-        "INVALID_MOVE_ATTACK": -200,
-        "CONSECUTIVE_INVALID_MOVE": -500,
-        "GAME_LENGTH_PENALTY": -5,
+        "INVALID_MOVE": -30,
+        "CONSECUTIVE_INVALID_MOVE": -400,
+        "GAME_LENGTH_PENALTY": -8,
     }

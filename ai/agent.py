@@ -54,7 +54,6 @@ class Agent:
         if phase == "REINFORCE" or phase == "INITIAL_PLACEMENT":
             valid_targets = [
                 t_id for t_id in my_territories 
-                if board.territories[t_id].armies < Config.GAME["MAX_ARMIES_PER_TERRITORY"]
             ]
             if not valid_targets:
                 return {"type": "PASS", "src": 0, "dest": 0, "qty": 0}

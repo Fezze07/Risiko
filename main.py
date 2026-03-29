@@ -1,8 +1,8 @@
 import argparse
 import concurrent.futures
 import os
-from typing import List, Tuple, Optional
 
+from typing import List, Tuple, Optional
 from colorama import Fore, Style, init
 
 from ai.agent import Agent
@@ -128,7 +128,6 @@ class Main:
             total_invalid_moves = 0
             total_turns_sum = 0
             total_armies_placed_sum = 0
-            total_timeouts = 0
             total_eliminations_sum = 0
 
             for res_idx, (fitness_scores, stats) in enumerate(results):
@@ -162,7 +161,6 @@ class Main:
                 total_invalid_moves += stats.get('invalid_moves', 0)
                 total_turns_sum += stats.get('total_turns', 0)
                 total_armies_placed_sum += stats.get('armies_placed', 0)
-                total_timeouts += stats.get('is_timeout', 0)
                 total_eliminations_sum += stats.get('players_eliminated', 0)
 
             # Normalizzazione fitness per il numero di match giocati
@@ -217,8 +215,7 @@ class Main:
                 f"GEN {generation + 1} | Best: {best_color}{best_agent.fitness:.0f}{Style.RESET_ALL} "
                 f"| Avg: {avg_color}{avg_fitness:.0f}{Style.RESET_ALL} "
                 f"| Conq: {total_territories_captured}\n"
-                f"  Outcomes: Wins {total_wins} | Loss {total_losses} | Stale {total_stalemates} "
-                f"(Timeouts: {total_timeouts})\n"
+                f"  Outcomes: Wins {total_wins} | Loss {total_losses} | Stale {total_stalemates}\n"
                 f"  Diagnosis: Invalid {total_invalid_moves} | Avg Turns {avg_turns:.1f} "
                 f"| Elims {avg_eliminations:.1f} | ReinEff {reinforce_eff:.2f}\n"
                 f"  Phase Avg: Rein {reinforce_avg:.2f} | Att {attack_avg:.2f} | Man {maneuver_avg:.2f}\n"

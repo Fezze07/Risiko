@@ -4,7 +4,7 @@ from config import Config
 
 class ActionValidator:
     @staticmethod
-    def validate_reinforce(board: Board, player_id: int, action: Dict[str, Any], armies_to_place: int, max_armies: int) -> Tuple[bool, str]:
+    def validate_reinforce(board: Board, player_id: int, action: Dict[str, Any], armies_to_place: int) -> Tuple[bool, str]:
         if 'dest' not in action:
             return False, "Destinazione mancante"
         
@@ -31,11 +31,10 @@ class ActionValidator:
 
         # Check simulato sulla quantità
         to_add = max(1, int(armies_to_place * qty))
-        space_in_territory = max_armies - t_dest.armies
-        effective_add = min(to_add, armies_to_place, space_in_territory)
+        effective_add = min(to_add, armies_to_place)
         
         if effective_add <= 0:
-            return False, "Nessuno spazio disponibile o quantità nulla"
+            return False, "Nessuna armata da piazzare o quantità nulla"
 
         return True, ""
 
@@ -66,7 +65,7 @@ class ActionValidator:
         return True, ""
 
     @staticmethod
-    def validate_maneuver(board: Board, player_id: int, action: Dict[str, Any], max_armies: int) -> Tuple[bool, str]:
+    def validate_maneuver(board: Board, player_id: int, action: Dict[str, Any]) -> Tuple[bool, str]:
         if 'src' not in action or 'dest' not in action:
              return False, "Sorgente o destinazione mancante"
 
@@ -97,9 +96,6 @@ class ActionValidator:
         if amount < 1:
             return False, "Quantità da spostare insufficiente (< 1)"
             
-        # Check Max Armies (Anti-Farming)
-        if t_dest.armies + amount > max_armies:
-             return False, f"Limite armate superato ({t_dest.armies} + {amount} > {max_armies})"
 
         return True, ""
 

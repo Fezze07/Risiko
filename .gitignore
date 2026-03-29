@@ -3,8 +3,5 @@
 tests/
 __pycache__/
 *.pyc
-*.pkl
 records.json
 .pytest_cache/
-dataset/
-__skills/

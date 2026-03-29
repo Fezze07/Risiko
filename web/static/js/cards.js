@@ -87,7 +87,12 @@ export function toggleCardPanel(forceState) {
     const panel = document.getElementById('card-panel');
     if (!panel) return;
 
-    CardStore.isOpen = (forceState !== undefined) ? forceState : !CardStore.isOpen;
+    const nextState = (forceState !== undefined) ? forceState : !CardStore.isOpen;
+    
+    // Se lo stato non cambia, evita di rifare tutto (specialmente la fetchCards)
+    if (nextState === CardStore.isOpen && forceState !== undefined) return;
+
+    CardStore.isOpen = nextState;
     
     if (CardStore.isOpen) {
         panel.classList.remove('hidden');

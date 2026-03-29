@@ -94,7 +94,7 @@ class Processor:
         mission_data: Optional[Dict[str, Any]] = None,
     ) -> np.ndarray:
         state_vector = np.zeros(self.input_size, dtype=np.float32)
-        max_armies = max(1, int(Config.GAME["MAX_ARMIES_PER_TERRITORY"]))
+        max_armies = max(1, int(Config.GAME.get("MAX_TOTAL_ARMIES", 100)))
         total_players = self._resolve_total_players(board, current_player_id)
 
         # 1) Pre-calcolo dati globali e di proprietà
@@ -291,7 +291,6 @@ class Processor:
             valid_targets = [
                 t_id
                 for t_id in my_territories
-                if board.territories[t_id].armies < Config.GAME["MAX_ARMIES_PER_TERRITORY"]
             ]
             stack_threshold = Config.REWARD.get("REINFORCE_STACK_THRESHOLD", 0)
             if stack_threshold:

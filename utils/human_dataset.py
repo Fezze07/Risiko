@@ -31,7 +31,7 @@ def encode_action_target(board, player_id: int, phase: str, action: Dict[str, An
         valid_targets = [
             t_id
             for t_id, t in board.territories.items()
-            if t.owner_id == player_id and t.armies < Config.GAME["MAX_ARMIES_PER_TERRITORY"]
+            if t.owner_id == player_id
         ]
         if not valid_targets:
             return None
