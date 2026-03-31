@@ -33,50 +33,46 @@ Questo progetto implementa un ambiente avanzato di **Reinforcement Learning** pe
 ## 🎮 Utilizzo
 
 ### Addestramento
-Per avviare l'evoluzione della popolazione:
+Per avviare l'evoluzione della popolazione in parallelo:
 ```bash
 python main.py
 ```
+Puoi specificare il numero di generazioni con `--generations <N>` e i processi con `--max-workers <W>`.
 
-### Osservazione Match
-Per vedere i migliori agenti sfidarsi in console (modalità debug):
+### Web Dashboard
+Per avviare la dashboard grafica (stats e visualizzazione partita):
 ```bash
-python main.py --watch
-```
-
-### Web Interface
-Per avviare il server web e accedere alla dashboard (stats e visualizzazione grafica):
-```bash
-python -m web.server
+uvicorn app.web.server:app --reload --port 8000
 ```
 Poi apri `http://localhost:8000` nel browser.
 
 ## 📂 Struttura del Progetto
 
-- **`main.py`**: Entry point principale per il training e la gestione dei processi paralleli.
-- **`config.py`**: Configurazione centralizzata (Iperparametri, Reward, Regole di gioco).
-- **`core/`**: Logica del gioco e regole.
-    - `environment.py`: Motore del gioco e calcolo dei premi.
-    - `actions.py`: Esecuzione fisica delle azioni (Attacchi, Rinforzi).
-    - `board.py` & `territory.py`: Modello dati della mappa.
-    - `validators.py`: Controllo della validità delle mosse.
-    - `task.py`: Gestione degli obiettivi e delle missioni.
-- **`ai/`**: Cervello degli agenti.
-    - `network.py`: Architettura della Rete Neurale (NumPy focus).
-    - `evolution.py`: Operatori genetici (Mutazione, Crossover).
-    - `processor.py`: Encoding/Decoding dello stato tra board e rete.
-- **`web/`**: Server FastAPI e interfaccia frontend (Socket communication).
-- **`dataset/`**: Raccolta di dati per l'Imitation Learning.
-- **`utils/`**: Utility per il logging, training parallelo e gestione dei match.
-- **`visual/`**: Renderer ANSI per la console.
-- **`tests/`**: Suite di test unitari per l'ambiente e le ricompense.
+Il progetto è organizzato per separare la logica del gioco (Core), l'intelligenza degli agenti (AI) e l'interfaccia di monitoraggio (Web).
+
+- **`main.py`**: Entry point per avviare il training evolutivo parallelo.
+- **`config.py`**: Configurazione centralizzata degli iperparametri, reward e regole.
+- **`app/`**: Core del software.
+    - **`core/`**: Motore del gioco e regole di Risiko.
+        - `environment.py`: Gestione turni, fasi di gioco e calcolo reward.
+        - `board.py` & `world.py`: Rappresentazione della mappa e dei territori.
+        - `actions.py`: Implementazione fisica delle mosse.
+        - `cards.py`: Gestione del mazzo carte e bonus tris.
+    - **`ai/`**: Logica degli agenti.
+        - `network.py`: Architettura della rete neurale (NumPy).
+        - `evolution.py`: Algoritmi genetici (Crossover, Mutazione).
+        - `processor.py`: Encoding dello stato mappa per gli ingressi dell'AI.
+        - `agent.py`: Classe base dell'agente intelligente.
+    - **`web/`**: API FastAPI e dashboard frontend.
+    - **`utils/`**: Utility per logging, parallelismo e gestione dataset.
+- **`dataset/`**: File `.jsonl` per l'Imitation Learning.
 
 ## 🛠️ Stack Tecnologico
 
-- **Python 3.x**
-- **NumPy**: Motore di calcolo per le reti neurali.
-- **FastAPI**: Backend per la dashboard web.
-- **Colorama**: Visualizzazione raffinata in terminale.
+- **Python 3.11+**
+- **NumPy**: Calcolo matriciale per le reti neurali.
+- **FastAPI & Uvicorn**: Backend asincrono per la dashboard.
+- **Colorama**: Formattazione output terminale.
 
 ---
 

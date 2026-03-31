@@ -380,25 +380,54 @@ class Processor:
             }
 
         elif current_phase == "MANEUVER":
-            maneuver_threshold = Config.NN.get("MANEUVER_DECISION_THRESHOLD", 0.5)
+            maneuver_threshold = Config.NN.get("MANEUVER_DECISION_THRESHOLD", 0.45)
             if raw_decision > maneuver_threshold:
-                # Filtriamo sorgenti valide (miei territori con truppe > 1)
+                candidates = []
+                # Consideriamo tutti i territori che possediamo con almeno 2 armate
                 valid_sources = [t_id for t_id in my_territories if board.territories[t_id].armies > 1]
 
-                if valid_sources:
-                    idx_s = int(raw_src * len(valid_sources))
-                    src_id = valid_sources[min(idx_s, len(valid_sources) - 1)]
+                for src_id in valid_sources:
+                    t_src = board.territories[src_id]
+                    src_is_frontline = any(board.territories[n].owner_id != player_id for n in t_src.neighbors)
+                    src_threat = sum(board.territories[n].armies for n in t_src.neighbors if board.territories[n].owner_id != player_id)
 
-                    # Filtriamo vicini alleati per lo spostamento
-                    friends = [n for n in board.territories[src_id].neighbors if board.territories[n].owner_id == player_id]
-                    if friends:
-                        idx_d = int(raw_dest * len(friends))
-                        dest_id = friends[min(idx_d, len(friends) - 1)]
-                        action = {
-                            "type": "MANEUVER",
-                            "src": src_id,
-                            "dest": dest_id,
-                            "qty": qty_percent
-                        }
+                    friends = [n for n in t_src.neighbors if board.territories[n].owner_id == player_id]
+                    for dest_id in friends:
+                        t_dest = board.territories[dest_id]
+                        dest_is_frontline = any(board.territories[n].owner_id != player_id for n in t_dest.neighbors)
+                        dest_threat = sum(board.territories[n].armies for n in t_dest.neighbors if board.territories[n].owner_id != player_id)
+
+                        score = 0
+                        
+                        if not src_is_frontline and dest_is_frontline:
+                            score += 100  # Eccellente: Retrovie -> Fronte
+                        elif not src_is_frontline and not dest_is_frontline:
+                            score += 10   # Discreto: Retrovie -> Retrovie (ci si aspetta che si avvicini prima o poi)
+                        elif src_is_frontline and dest_is_frontline:
+                            if dest_threat > src_threat:
+                                score += 5  # Sufficiente: Fronte -> Fronte (verso minaccia maggiore)
+                            else:
+                                score -= 50 # Sconsigliato togliere da un fronte minacciato per uno meno minacciato
+                        elif src_is_frontline and not dest_is_frontline:
+                            if src_threat == 0:
+                                score += 1  # Accettabile se front non minacciato
+                            else:
+                                score -= 100 # Disastroso: Fronte -> Retrovie deproteggendo il fronte
+                                
+                        if score >= 0:
+                            candidates.append((score, src_id, dest_id))
+                            
+                if candidates:
+                    # Ordiniamo per score decrescente
+                    candidates.sort(key=lambda x: x[0], reverse=True)
+                    # Usa raw_src per scegliere tra i candidati selezionando in modo proporzionale
+                    idx = int(raw_src * len(candidates))
+                    picked = candidates[min(idx, len(candidates) - 1)]
+                    action = {
+                        "type": "MANEUVER",
+                        "src": picked[1],
+                        "dest": picked[2],
+                        "qty": qty_percent
+                    }
 
         return action

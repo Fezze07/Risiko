@@ -47,9 +47,12 @@ class ActionHandler:
 
         if not is_frontline:
             if has_frontline_any:
-                reward += Config.REWARD.get('REINFORCE_SAFE_PENALTY', -50)
+                # Penalità base per rinforzo in zona sicura
+                reward += Config.REWARD.get('REINFORCE_SAFE_PENALTY', -15)
+                # Penalità aggiuntiva per-armata piazzata in zona sicura
+                per_army_pen = Config.REWARD.get('REINFORCE_SAFE_PENALTY_PER_ARMY', -3)
+                reward += to_add * per_army_pen
                 extra_info['reinforce_safe_penalty'] = True
-
 
         return reward, to_add, extra_info
 
@@ -195,7 +198,7 @@ class ActionHandler:
         src_is_frontline = any(
             board.territories[n].owner_id != player_id for n in t_src.neighbors
         )
-        
+
         t_src.armies -= amount
         t_dest.armies += amount
 
@@ -210,12 +213,36 @@ class ActionHandler:
         }
 
         reward = 0
-        
-        # Bonus strategico: portiamo truppe dalle retrovie al fronte
+
         if dest_is_frontline and not src_is_frontline:
-            reward += Config.REWARD.get('MANEUVER_TO_FRONT', 50)
-            extra_info['strategic_move'] = True
-            
+            # Retrovie -> Fronte: bonus base + per-armata
+            base_bonus = Config.REWARD.get('MANEUVER_TO_FRONT_BASE', 10)
+            per_army_bonus = Config.REWARD.get('MANEUVER_TO_FRONT_PER_ARMY', 4)
+            reward += base_bonus + (amount * per_army_bonus)
+            extra_info['maneuver_strategic'] = True
+
+        elif dest_is_frontline and src_is_frontline:
+            # Fronte -> Fronte: piccolo bonus di prossimità solo se la dest ha più pressione nemica
+            max_threat_src = max(
+                (board.territories[n].armies for n in t_src.neighbors if board.territories[n].owner_id != player_id),
+                default=0
+            )
+            max_threat_dest = max(
+                (board.territories[n].armies for n in t_dest.neighbors if board.territories[n].owner_id != player_id),
+                default=0
+            )
+            if max_threat_dest > max_threat_src:
+                prox_bonus = Config.REWARD.get('MANEUVER_PROXIMITY_BONUS', 5)
+                reward += prox_bonus
+                extra_info['maneuver_proximity'] = True
+
+        elif not dest_is_frontline and src_is_frontline:
+            # Fronte -> Retrovie: penalità (si deprotegge il confine)
+            # Usiamo END_PHASE_LEAVE_ONE_PENALTY come penalità proxy
+            retreat_penalty = Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -150) * 0.5
+            reward += retreat_penalty
+            extra_info['maneuver_away_from_front'] = True
+
         return reward, extra_info
 
     @staticmethod
