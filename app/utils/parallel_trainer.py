@@ -35,7 +35,15 @@ def _init_phase_stats() -> Dict[str, float | int]:
     stats['armies_placed'] = 0
     stats['players_eliminated'] = 0
     stats['inactive_penalties_sum'] = 0.0
-    
+
+    # Deep Maneuver Diagnosis
+    stats['maneuver_inactive_pen_sum'] = 0.0   # Punti persi per armate inattive nelle retrovie
+    stats['maneuver_leave_one_pen_sum'] = 0.0  # Punti persi per frontiere scoperte
+    stats['maneuver_strategic_count'] = 0      # Manovre Retrovie->Fronte effettuate (positive)
+    stats['maneuver_away_count'] = 0           # Manovre Fronte->Retrovie (negative)
+    stats['maneuver_pass_count'] = 0           # Quante volte l'AI ha skippato la manovra
+    stats['garrison_bonus_sum'] = 0.0          # Punti ottenuti per presidio stabile a fine turno
+
     return stats
 
 
@@ -95,9 +103,34 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, float], Dict[st
 
         if action_type == 'reinforce':
             stats['armies_placed'] += info.get('reinforce_qty', 0)
-            
+
         if info.get('inactive_army_penalty'):
             stats['inactive_penalties_sum'] += info.get('inactive_army_penalty', 0.0)
+
+        # --- Deep Maneuver Diagnosis ---
+        if action_type == 'maneuver':
+            if info.get('inactive_army_penalty'):
+                stats['maneuver_inactive_pen_sum'] += float(info.get('inactive_army_penalty', 0.0))
+            if info.get('end_phase_left_one'):
+                pen = Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -150)
+                stats['maneuver_leave_one_pen_sum'] += float(info.get('end_phase_left_one', 0)) * pen
+            if info.get('maneuver_strategic'):
+                stats['maneuver_strategic_count'] += 1
+            if info.get('maneuver_away_from_front'):
+                stats['maneuver_away_count'] += 1
+        
+        # Il Garrison Bonus (END_TURN_WITH_2_GARRISON_ARMY) calcolato in info
+        if info.get('garrison_bonus'):
+            stats['garrison_bonus_sum'] += float(info.get('garrison_bonus', 0.0))
+
+        if action_type == 'pass' and phase == 'MANEUVER':
+            stats['maneuver_pass_count'] += 1
+            # Anche il PASS in MANEUVER può aver subito penalità di fine turno
+            if info.get('inactive_army_penalty'):
+                stats['maneuver_inactive_pen_sum'] += float(info.get('inactive_army_penalty', 0.0))
+            if info.get('end_phase_left_one'):
+                pen = Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -150)
+                stats['maneuver_leave_one_pen_sum'] += float(info.get('end_phase_left_one', 0)) * pen
             
         fitness_map[curr_p] += reward
 

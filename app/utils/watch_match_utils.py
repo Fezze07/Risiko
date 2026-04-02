@@ -19,7 +19,11 @@ class WatchMatchUtils:
             if info.get('reinforce_chokepoint'):
                 reasons.append('Bonus Chokepoint')
             if info.get('reinforce_safe_penalty'):
-                reasons.append('Penalità interno')
+                qty = info.get('reinforce_qty', 0)
+                pen_base = Config.REWARD.get('REINFORCE_SAFE_PENALTY', -15)
+                pen_per = Config.REWARD.get('REINFORCE_SAFE_PENALTY_PER_ARMY', -3)
+                total_pen = pen_base + qty * pen_per
+                reasons.append(f'Penaltà zona sicura ({total_pen:.0f})')
             if info.get('reinforce_qty'):
                 reasons.append(f"Piazzate {info['reinforce_qty']}")
 
@@ -40,7 +44,6 @@ class WatchMatchUtils:
                 reasons.append('Attacco rischioso')
             
             if reward < 0 and not info.get('conquered'):
-                # Perda armate ma senza conquistare
                 reasons.append('esercito perso')
 
         # --- POST_ATTACK_MOVE ---
@@ -50,31 +53,40 @@ class WatchMatchUtils:
 
         # --- MANEUVER ---
         elif action_type == 'MANEUVER':
+            qty = info.get('maneuver_qty', 0)
             if info.get('maneuver_strategic'):
-                reasons.append('Al fronte')
-            if info.get('maneuver_to_chokepoint'):
-                reasons.append('Verso Chokepoint')
+                base = Config.REWARD.get('MANEUVER_TO_FRONT_BASE', 10)
+                per = Config.REWARD.get('MANEUVER_TO_FRONT_PER_ARMY', 4)
+                total = base + qty * per
+                reasons.append(f'Retrovie->Fronte (+{total:.0f})')
+            if info.get('maneuver_proximity'):
+                prox = Config.REWARD.get('MANEUVER_PROXIMITY_BONUS', 5)
+                reasons.append(f'Verso Minaccia (+{prox})')
             if info.get('maneuver_away_from_front'):
-                reasons.append('Ritirata')
+                pen = Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -150) * 0.5
+                reasons.append(f'Fronte->Retrovie ({pen:.0f})')
 
         # --- PASS ---
         elif action_type == 'PASS':
             if info.get('passive_turn_penalty'):
-                reasons.append('Malus PASS ripetuto')
+                reasons.append(f"Malus PASS ripetuto ({info['passive_turn_penalty']:.0f})")
 
-        # --- FINE TURNO (Shared by PASS and MANEUVER) ---
+        # --- FINE TURNO: Penalità di Manovra (PASS e MANEUVER) ---
         if action_type in ('PASS', 'MANEUVER'):
             if info.get('end_phase_left_one'):
                 count = info.get('end_phase_left_one', 0)
-                reasons.append(f'Confine scoperto (x{count})')
+                pen = Config.REWARD.get('END_PHASE_LEAVE_ONE_PENALTY', -150)
+                total_pen = count * pen
+                reasons.append(f'Confine scoperto x{count} ({total_pen:.0f})')
             if info.get('garrison_bonus'):
-                reasons.append('Bonus presidio')
+                gb = info.get('garrison_bonus', 0)
+                reasons.append(f'Bonus presidio (+{gb})')
             if info.get('inactive_army_penalty'):
+                total_pen = info.get('inactive_army_penalty', 0.0)
+                count = info.get('inactive_army_count', '?')
                 details = info.get('inactive_details', '')
-                if details:
-                    reasons.append(f'Penalità inattive: {details}')
-                else:
-                    reasons.append('Penalità inattive')
+                detail_str = f' [{details}]' if details else ''
+                reasons.append(f'Inattive x{count} ({total_pen:.0f}){detail_str}')
 
         return " | ".join(reasons) if reasons else "OK"
 

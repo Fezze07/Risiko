@@ -189,16 +189,9 @@ class RisikoEnvironment:
                     reward += exposed * pen
                     info['end_phase_left_one'] = exposed
 
-                # Bonus se almeno un territorio di frontiera ha più di 2 armate
-                has_garrisoned_border = any(
-                    t.owner_id == player_id and t.armies > 2 and
-                    any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
-                    for t in self.board.territories.values()
-                )
-                if has_garrisoned_border:
-                    garrison_bonus = Config.REWARD.get('END_TURN_WITH_2_GARRISON_ARMY', 30)
-                    reward += garrison_bonus
-                    info['garrison_bonus'] = garrison_bonus
+                # Bonus presidio esponenziale e penalità truppe inattive applicate a fine turno
+                reward += self._get_garrison_bonus(player_id, info)
+                reward += self._get_inactive_army_penalty(player_id, info)
 
                 self._end_turn()
             elif self.current_phase == 'POST_ATTACK_MOVE':
@@ -384,7 +377,8 @@ class RisikoEnvironment:
                 reward += exposed * pen
                 info['end_phase_left_one'] = exposed
 
-            # Penalità truppe inattive applicate a fine turno
+            # Reward presidio e penalità truppe inattive applicate a fine turno
+            reward += self._get_garrison_bonus(player_id, info)
             reward += self._get_inactive_army_penalty(player_id, info)
             
             # Bonus Manovra verso Chokepoint
@@ -448,6 +442,21 @@ class RisikoEnvironment:
         if stable_count > 0:
             info['frontline_garrisoned'] = stable_count
         return bonus
+
+    def _get_garrison_bonus(self, player_id: int, info: Dict[str, Any]) -> float:
+        base_garrison = float(Config.REWARD.get('END_TURN_WITH_2_GARRISON_ARMY', 20))
+        total_garrison_bonus = 0.0
+        
+        for t in self.board.territories.values():
+            if t.owner_id == player_id:
+                is_border = any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
+                if is_border and t.armies >= 2:
+                    # Semplice somma per ogni territorio
+                    total_garrison_bonus += base_garrison
+        
+        if total_garrison_bonus > 0:
+            info['garrison_bonus'] = total_garrison_bonus
+        return total_garrison_bonus
 
     def _get_inactive_army_penalty(self, player_id: int, info: Dict[str, Any]) -> float:
         penalty_per_army = float(Config.REWARD.get('INTERNAL_ARMY_PENALTY', -15))

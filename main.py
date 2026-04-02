@@ -130,6 +130,14 @@ class Main:
             total_armies_placed_sum = 0
             total_eliminations_sum = 0
 
+            # Deep Maneuver Diagnosis counters
+            man_inactive_pen_sum = 0.0
+            man_leave_one_pen_sum = 0.0
+            man_strategic_count = 0
+            man_away_count = 0
+            man_pass_count = 0
+            garrison_bonus_sum_all = 0.0
+
             for res_idx, (fitness_scores, stats) in enumerate(results):
                 player_indices = match_tasks_data[res_idx][1]
                 for i, player_idx in enumerate(player_indices):
@@ -162,6 +170,14 @@ class Main:
                 total_turns_sum += stats.get('total_turns', 0)
                 total_armies_placed_sum += stats.get('armies_placed', 0)
                 total_eliminations_sum += stats.get('players_eliminated', 0)
+
+                # Deep Maneuver Diagnosis accumulation
+                man_inactive_pen_sum += stats.get('maneuver_inactive_pen_sum', 0.0)
+                man_leave_one_pen_sum += stats.get('maneuver_leave_one_pen_sum', 0.0)
+                man_strategic_count += stats.get('maneuver_strategic_count', 0)
+                man_away_count += stats.get('maneuver_away_count', 0)
+                man_pass_count += stats.get('maneuver_pass_count', 0)
+                garrison_bonus_sum_all += stats.get('garrison_bonus_sum', 0.0)
 
             # Normalizzazione fitness per il numero di match giocati
             for agent in population:
@@ -206,11 +222,21 @@ class Main:
             avg_eliminations = total_eliminations_sum / num_matches if num_matches > 0 else 0
             reinforce_eff = total_armies_placed_sum / reinforce_count if reinforce_count > 0 else 0
 
+            # Deep Maneuver Averages (per match)
+            avg_man_inactive = man_inactive_pen_sum / num_matches if num_matches > 0 else 0
+            avg_man_leave_one = man_leave_one_pen_sum / num_matches if num_matches > 0 else 0
+            man_strategic_pct = (man_strategic_count / maneuver_count * 100) if maneuver_count > 0 else 0
+            man_away_pct = (man_away_count / maneuver_count * 100) if maneuver_count > 0 else 0
+            avg_garrison_bonus = garrison_bonus_sum_all / num_matches if num_matches > 0 else 0
+
             self.evo_manager.save_best_agent('best_agent.pkl')
 
             best_color = Fore.GREEN if best_agent.fitness >= 0 else Fore.RED
             avg_color = Fore.GREEN if avg_fitness >= 0 else Fore.RED
-            
+
+            inactive_color = Fore.RED if avg_man_inactive < -100 else Fore.YELLOW
+            leave_color = Fore.RED if avg_man_leave_one < -50 else Fore.YELLOW
+
             print(
                 f"GEN {generation + 1} | Best: {best_color}{best_agent.fitness:.0f}{Style.RESET_ALL} "
                 f"| Avg: {avg_color}{avg_fitness:.0f}{Style.RESET_ALL} "
@@ -221,6 +247,13 @@ class Main:
                 f"  Phase Avg: Rein {reinforce_avg:.2f} | Att {attack_avg:.2f} | Man {maneuver_avg:.2f}\n"
                 f"  Actions: Pass {pass_pct:.1f}% | Rein {reinforce_pct:.1f}% | Att {attack_pct:.1f}% "
                 f"| Post {post_attack_pct:.1f}% | Man {maneuver_pct:.1f}%\n"
+                f"  Man Diagnosis: "
+                f"Inattive {inactive_color}{avg_man_inactive:.0f}{Style.RESET_ALL}/match "
+                f" FrScoperto {leave_color}{avg_man_leave_one:.0f}{Style.RESET_ALL}/match \n"
+                f"  Strategiche {man_strategic_pct:.1f}% "
+                f"| Ritiri {man_away_pct:.1f}% "
+                f"| ManPass {man_pass_count} "
+                f"| Presidio {Fore.CYAN}{avg_garrison_bonus:.0f}{Style.RESET_ALL}/match\n"
             )
 
 

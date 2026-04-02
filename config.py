@@ -140,10 +140,10 @@ class Config:
         "PASS_PENALTY_CAP": -10000,
         # --- DIFESA / PRESIDIO ---
         "FRONTLINE_GARRISON_BONUS": 20,
-        "END_TURN_WITH_2_GARRISON_ARMY": 30,
+        "END_TURN_WITH_2_GARRISON_ARMY": 20,
         # --- MANOVRA ---
-        "MANEUVER_TO_FRONT_BASE": 10,
-        "MANEUVER_TO_FRONT_PER_ARMY": 4,     # Reward aggiuntivo PER OGNI armata spostata al fronte
+        "MANEUVER_TO_FRONT_BASE": 15,
+        "MANEUVER_TO_FRONT_PER_ARMY": 5,     # Reward aggiuntivo PER OGNI armata spostata al fronte
         "MANEUVER_PROXIMITY_BONUS": 5,        # Bonus gradiente: ci si avvicina al fronte da interne
         "MANEUVER_TO_CHOKEPOINT": 20,
         "INTERNAL_ARMY_PENALTY": -15,         # Penalità base per armata inattiva nelle retrovie
