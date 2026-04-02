@@ -459,7 +459,8 @@ class RisikoEnvironment:
         return total_garrison_bonus
 
     def _get_inactive_army_penalty(self, player_id: int, info: Dict[str, Any]) -> float:
-        penalty_per_army = float(Config.REWARD.get('INTERNAL_ARMY_PENALTY', -15))
+        penalty_per_army = float(Config.REWARD.get('INTERNAL_ARMY_PENALTY', -2))
+        heavy_threshold = int(Config.REWARD.get('INTERNAL_ARMY_HEAVY_THRESHOLD', 5))
         total_penalty = 0.0
         inactive_count = 0
         
@@ -468,7 +469,15 @@ class RisikoEnvironment:
                 is_frontline = any(self.board.territories[n].owner_id != player_id for n in t.neighbors)
                 if not is_frontline and t.armies > 1:
                     inactive_armies = t.armies - 1
-                    total_penalty += inactive_armies * penalty_per_army
+                    
+                    if inactive_armies <= heavy_threshold:
+                        total_penalty += inactive_armies * penalty_per_army
+                    else:
+                        base_penalty = heavy_threshold * penalty_per_army
+                        extra_armies = inactive_armies - heavy_threshold
+                        extra_penalty = extra_armies * (penalty_per_army * 2)
+                        total_penalty += base_penalty + extra_penalty
+                        
                     inactive_count += inactive_armies
         
         if total_penalty != 0:

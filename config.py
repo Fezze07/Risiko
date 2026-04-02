@@ -126,7 +126,7 @@ class Config:
         "REINFORCE_SAFE_PENALTY_PER_ARMY": -3,  # Penalità aggiuntiva PER OGNI armata piazzata in zona sicura
         "REINFORCE_CHOKEPOINT_BONUS": 15,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 60,
+        "CONQUER_TERRITORY": 50,
         "CONQUEST_DECAY_FACTOR": 0.65,
         "CONQUER_CHOKEPOINT_BONUS": 30,
         "LOSE_ARMY": -15,
