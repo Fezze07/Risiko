@@ -134,7 +134,7 @@ class Config:
         # --- CONTINENTI / CONTROLLO MAPPA ---
         "CONQUER_CONTINENT": 50,
         # --- FINE FASE ---
-        "END_PHASE_LEAVE_ONE_PENALTY": -150,
+        "END_PHASE_LEAVE_ONE_PENALTY": -30,
         # --- PASSAGGIO TURNO ---
         "PASSIVE_TURN_PENALTY": -100,
         "PASS_PENALTY_CAP": -10000,
@@ -142,11 +142,11 @@ class Config:
         "FRONTLINE_GARRISON_BONUS": 20,
         "END_TURN_WITH_2_GARRISON_ARMY": 20,
         # --- MANOVRA ---
-        "MANEUVER_TO_FRONT_BASE": 15,
-        "MANEUVER_TO_FRONT_PER_ARMY": 5,     # Reward aggiuntivo PER OGNI armata spostata al fronte
-        "MANEUVER_PROXIMITY_BONUS": 5,        # Bonus gradiente: ci si avvicina al fronte da interne
+        "MANEUVER_TO_FRONT_BASE": 35,
+        "MANEUVER_TO_FRONT_PER_ARMY": 8,     # Reward aggiuntivo PER OGNI armata spostata al fronte
+        "MANEUVER_PROXIMITY_BONUS": 10,        # Bonus gradiente: ci si avvicina al fronte da interne
         "MANEUVER_TO_CHOKEPOINT": 20,
-        "INTERNAL_ARMY_PENALTY": -15,         # Penalità base per armata inattiva nelle retrovie
+        "INTERNAL_ARMY_PENALTY": -2,         # Penalità base per armata inattiva nelle retrovie
         "INTERNAL_ARMY_HEAVY_THRESHOLD": 5,   # Oltre questo numero, penalità x2 per armata extra
         # --- ERRORI / STALLO / TEMPO ---
         "INVALID_MOVE": -30,

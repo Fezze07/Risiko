@@ -5,5 +5,7 @@ __pycache__/
 *.pyc
 logs/
 tests/
+scripts/
+pytest.ini
 .env
 .antigravity/
