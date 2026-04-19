@@ -90,7 +90,7 @@ class Agent:
             return {"type": "ATTACK", "src": src_id, "dest": dest_id, "qty": random.random()}
 
         if phase == "POST_ATTACK_MOVE":
-            return {"type": "POST_ATTACK_MOVE", "src": 0, "dest": 0, "qty": random.random()}
+            return {"type": "POST_ATTACK_MOVE", "src": -1, "dest": -1, "qty": random.random()}
 
         if phase == "MANEUVER":
             if random.random() < 0.2:

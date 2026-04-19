@@ -356,12 +356,6 @@ class RisikoEnvironment:
 
         # --- ACTION: MANEUVER ---
         elif self.current_phase == 'MANEUVER':
-            if action.get('type') == 'PASS':
-                info['action'] = 'Pass in MANEUVER phase'
-                # ... (rest of pass logic)
-                # Note: The pass logic is handled earlier in the 'if action[type] == PASS' block
-                pass 
-
             # Assicuriamoci che se l'IA decide di manovrare, sposti almeno 1 armata
             t_src = self.board.territories.get(action.get('src'))
             t_dest = self.board.territories.get(action.get('dest'))

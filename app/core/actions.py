@@ -170,9 +170,14 @@ class ActionHandler:
         if needed_src + needed_dest > 0:
             # Distribuzione proporzionale alla minaccia
             weight_dest = needed_dest / (needed_src + needed_dest)
-            suggested_move = int(movable_pool * weight_dest)
+            suggested_move = max(min_move, int(movable_pool * weight_dest))
             
-            pass
+            # Penalità se l'AI si discosta dal suggerimento strategico
+            diff = abs(intent_amount - suggested_move)
+            if diff > 0:
+                penalty_per_army = Config.REWARD.get('POST_ATTACK_SUBOPTIMAL_PENALTY', -5)
+                reward += diff * penalty_per_army
+                extra_info['post_attack_suboptimal_penalty'] = diff * penalty_per_army
         
         # Ora usiamo SEMPRE l'intento originale, limitato solo dai pool reali
         amount = max(min_move, min(intent_amount, movable_pool))
