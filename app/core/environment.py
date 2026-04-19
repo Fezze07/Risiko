@@ -131,6 +131,18 @@ class RisikoEnvironment:
             reward, placed, a_extra = self.action_handler.execute_reinforce(self.board, player_id, action, self.armies_to_place)
             info.update(a_extra)
             
+            # Penalità Overstacking in Setup: evita di mettere tutto in un posto solo
+            t_dest = self.board.territories.get(action.get('dest'))
+            if t_dest:
+                p_territories = self.board.get_player_territories(player_id)
+                if p_territories:
+                    avg_armies = sum(t.armies for t in p_territories) / len(p_territories)
+                    threshold = Config.REWARD.get('SETUP_OVERSTACK_THRESHOLD', 2)
+                    if t_dest.armies > (avg_armies + threshold):
+                        overstack_pen = Config.REWARD.get('SETUP_OVERSTACK_PENALTY', -15)
+                        reward += overstack_pen
+                        info['setup_overstack_penalty'] = overstack_pen
+            
             # Bonus Chokepoint: solo UNA volta per territorio per turno di rinforzo
             dest_id = action.get('dest')
             if dest_id in _CHOKEPOINT_IDS:
@@ -329,6 +341,15 @@ class RisikoEnvironment:
             info.update(m_i)
             # Tracciamo il territorio sorgente del post-conquista (da cui abbiamo mosso truppe)
             self.moved_from_territories.add(action['src'])
+
+            # Penalità Abbandono Frontiera Post-Attacco: evita di lasciare solo 1 armata su un confine attivo
+            t_src = self.board.territories.get(action['src'])
+            if t_src and t_src.armies == 1:
+                is_frontier = any(self.board.territories[n].owner_id != player_id for n in t_src.neighbors)
+                if is_frontier:
+                    abandon_pen = Config.REWARD.get('POST_ATTACK_LEAVE_ONE_PENALTY', -15)
+                    reward += abandon_pen
+                    info['post_attack_abandon_penalty'] = abandon_pen
             self._clear_pending_attack_move()
             self.current_phase = 'ATTACK'
             return self._finalize_step(reward, done, info, player_id, action)

@@ -137,6 +137,9 @@ class Main:
             man_away_count = 0
             man_pass_count = 0
             garrison_bonus_sum_all = 0.0
+            
+            setup_overstack_pen_sum = 0.0
+            post_attack_abandon_pen_sum = 0.0
 
             for res_idx, (fitness_scores, stats) in enumerate(results):
                 player_indices = match_tasks_data[res_idx][1]
@@ -178,6 +181,9 @@ class Main:
                 man_away_count += stats.get('maneuver_away_count', 0)
                 man_pass_count += stats.get('maneuver_pass_count', 0)
                 garrison_bonus_sum_all += stats.get('garrison_bonus_sum', 0.0)
+                
+                setup_overstack_pen_sum += stats.get('setup_overstack_pen_sum', 0.0)
+                post_attack_abandon_pen_sum += stats.get('post_attack_abandon_pen_sum', 0.0)
 
             # Normalizzazione fitness per il numero di match giocati
             for agent in population:
@@ -228,6 +234,9 @@ class Main:
             man_strategic_pct = (man_strategic_count / maneuver_count * 100) if maneuver_count > 0 else 0
             man_away_pct = (man_away_count / maneuver_count * 100) if maneuver_count > 0 else 0
             avg_garrison_bonus = garrison_bonus_sum_all / num_matches if num_matches > 0 else 0
+            
+            avg_setup_overstack = setup_overstack_pen_sum / num_matches if num_matches > 0 else 0
+            avg_post_attack_abandon = post_attack_abandon_pen_sum / num_matches if num_matches > 0 else 0
 
             self.evo_manager.save_best_agent('best_agent.pkl')
 
@@ -237,24 +246,38 @@ class Main:
             inactive_color = Fore.RED if avg_man_inactive < -100 else Fore.YELLOW
             leave_color = Fore.RED if avg_man_leave_one < -50 else Fore.YELLOW
 
-            print(
-                f"GEN {generation + 1} | Best: {best_color}{best_agent.fitness:.0f}{Style.RESET_ALL} "
-                f"| Avg: {avg_color}{avg_fitness:.0f}{Style.RESET_ALL} "
-                f"| Conq: {total_territories_captured}\n"
-                f"  Outcomes: Wins {total_wins} | Loss {total_losses} | Stale {total_stalemates}\n"
-                f"  Diagnosis: Invalid {total_invalid_moves} | Avg Turns {avg_turns:.1f} "
-                f"| Elims {avg_eliminations:.1f} | ReinEff {reinforce_eff:.2f}\n"
-                f"  Phase Avg: Rein {reinforce_avg:.2f} | Att {attack_avg:.2f} | Man {maneuver_avg:.2f}\n"
-                f"  Actions: Pass {pass_pct:.1f}% | Rein {reinforce_pct:.1f}% | Att {attack_pct:.1f}% "
-                f"| Post {post_attack_pct:.1f}% | Man {maneuver_pct:.1f}%\n"
-                f"  Man Diagnosis: "
-                f"Inattive {inactive_color}{avg_man_inactive:.0f}{Style.RESET_ALL}/match "
-                f" FrScoperto {leave_color}{avg_man_leave_one:.0f}{Style.RESET_ALL}/match \n"
-                f"  Strategiche {man_strategic_pct:.1f}% "
-                f"| Ritiri {man_away_pct:.1f}% "
-                f"| ManPass {man_pass_count} "
-                f"| Presidio {Fore.CYAN}{avg_garrison_bonus:.0f}{Style.RESET_ALL}/match\n"
-            )
+            print(f"\n{Fore.CYAN}{'='*80}{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}| {Style.BRIGHT}GENERAZIONE {generation + 1:<64}{Style.RESET_ALL}{Fore.CYAN} |")
+            print(f"{Fore.CYAN}{'='*80}{Style.RESET_ALL}")
+            
+            print(f"  {Style.BRIGHT}PERFORMANCE:{Style.RESET_ALL}")
+            print(f"    Best Fitness: {best_color}{best_agent.fitness:>8.0f}{Style.RESET_ALL} | "
+                  f"Avg Fitness: {avg_color}{avg_fitness:>8.0f}{Style.RESET_ALL} | "
+                  f"Total Conq: {Fore.YELLOW}{total_territories_captured:>6}{Style.RESET_ALL}")
+            print(f"    Outcomes:     Wins: {Fore.GREEN}{total_wins:>4}{Style.RESET_ALL} | "
+                  f"Loss: {Fore.RED}{total_losses:>4}{Style.RESET_ALL} | "
+                  f"Stale: {Fore.YELLOW}{total_stalemates:>4}{Style.RESET_ALL}")
+            
+            print(f"\n  {Style.BRIGHT}DIAGNOSTICS:{Style.RESET_ALL}")
+            print(f"    Errors:       {Fore.RED}{total_invalid_moves:>5}{Style.RESET_ALL} | "
+                  f"Avg Turns: {Fore.CYAN}{avg_turns:>5.1f}{Style.RESET_ALL} | "
+                  f"Eliminations: {Fore.YELLOW}{avg_eliminations:>4.1f}{Style.RESET_ALL} | "
+                  f"Rein.Eff: {Fore.MAGENTA}{reinforce_eff:>4.2f}{Style.RESET_ALL}")
+            print(f"    Overstack:    {Fore.YELLOW}{avg_setup_overstack:>5.1f}/match{Style.RESET_ALL} | "
+                  f"Post-Att Abandon: {Fore.YELLOW}{avg_post_attack_abandon:>5.1f}/match{Style.RESET_ALL}")
+            
+            print(f"\n  {Style.BRIGHT}PHASE ANALYSIS (Rewards & Actions):{Style.RESET_ALL}")
+            print(f"    Reinforce:    Rew: {reinforce_avg:>6.2f} | Act: {reinforce_pct:>5.1f}%")
+            print(f"    Attack:       Rew: {attack_avg:>6.2f} | Act: {attack_pct:>5.1f}%")
+            print(f"    Maneuver:     Rew: {maneuver_avg:>6.2f} | Act: {maneuver_pct:>5.1f}%")
+            print(f"    Post-Attack:  Act: {post_attack_pct:>5.1f}% | Pass: {pass_pct:>5.1f}%")
+
+            print(f"\n  {Style.BRIGHT}MANEUVER DETAILS:{Style.RESET_ALL}")
+            print(f"    Inactive:     {inactive_color}{avg_man_inactive:>6.0f}/match{Style.RESET_ALL} | "
+                  f"Exposed Front: {leave_color}{avg_man_leave_one:>6.0f}/match{Style.RESET_ALL}")
+            print(f"    Strategic:    {man_strategic_pct:>5.1f}% | Retreats: {man_away_pct:>5.1f}% | "
+                  f"Pass: {man_pass_count:>5} | Garrison: {Fore.CYAN}{avg_garrison_bonus:>4.0f}/match{Style.RESET_ALL}")
+            print(f"{Fore.CYAN}{'='*80}{Style.RESET_ALL}\n")
 
 
             self.evo_manager.evolve()

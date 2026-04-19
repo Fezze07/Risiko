@@ -35,6 +35,8 @@ def _init_phase_stats() -> Dict[str, float | int]:
     stats['armies_placed'] = 0
     stats['players_eliminated'] = 0
     stats['inactive_penalties_sum'] = 0.0
+    stats['setup_overstack_pen_sum'] = 0.0
+    stats['post_attack_abandon_pen_sum'] = 0.0
 
     # Deep Maneuver Diagnosis
     stats['maneuver_inactive_pen_sum'] = 0.0   # Punti persi per armate inattive nelle retrovie
@@ -106,6 +108,12 @@ def run_parallel_match(data: Tuple[Any, ...]) -> Tuple[Dict[int, float], Dict[st
 
         if info.get('inactive_army_penalty'):
             stats['inactive_penalties_sum'] += info.get('inactive_army_penalty', 0.0)
+        
+        if info.get('setup_overstack_penalty'):
+            stats['setup_overstack_pen_sum'] += float(info.get('setup_overstack_penalty', 0.0))
+            
+        if info.get('post_attack_abandon_penalty'):
+            stats['post_attack_abandon_pen_sum'] += float(info.get('post_attack_abandon_penalty', 0.0))
 
         # --- Deep Maneuver Diagnosis ---
         if action_type == 'maneuver':

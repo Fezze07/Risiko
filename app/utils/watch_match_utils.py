@@ -26,6 +26,8 @@ class WatchMatchUtils:
                 reasons.append(f'Penaltà zona sicura ({total_pen:.0f})')
             if info.get('reinforce_qty'):
                 reasons.append(f"Piazzate {info['reinforce_qty']}")
+            if info.get('setup_overstack_penalty'):
+                reasons.append(f"Overstacking Setup ({info['setup_overstack_penalty']:.0f})")
 
         # --- ATTACK ---
         elif action_type == 'ATTACK':
@@ -50,6 +52,8 @@ class WatchMatchUtils:
         elif action_type == 'POST_ATTACK_MOVE':
             if 'post_attack_move_qty' in info:
                 reasons.append(f"spostate {info['post_attack_move_qty']}")
+            if info.get('post_attack_abandon_penalty'):
+                reasons.append(f"Frontiera abbandonata ({info['post_attack_abandon_penalty']:.0f})")
 
         # --- MANEUVER ---
         elif action_type == 'MANEUVER':

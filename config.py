@@ -126,15 +126,19 @@ class Config:
         "REINFORCE_SAFE_PENALTY_PER_ARMY": -3,  # Penalità aggiuntiva PER OGNI armata piazzata in zona sicura
         "REINFORCE_CHOKEPOINT_BONUS": 15,
         # --- ATTACCO / COMBATTIMENTO ---
-        "CONQUER_TERRITORY": 50,
+        "CONQUER_TERRITORY": 35,
         "CONQUEST_DECAY_FACTOR": 0.65,
         "CONQUER_CHOKEPOINT_BONUS": 30,
-        "LOSE_ARMY": -15,
+        "LOSE_ARMY": -20,
         "ATTACK_RISK_PENALTY": -30,
         # --- CONTINENTI / CONTROLLO MAPPA ---
-        "CONQUER_CONTINENT": 50,
+        "CONQUER_CONTINENT": 45,
         # --- FINE FASE ---
         "END_PHASE_LEAVE_ONE_PENALTY": -30,
+        "POST_ATTACK_LEAVE_ONE_PENALTY": -15,
+        # --- INITIAL PLACEMENT ---
+        "SETUP_OVERSTACK_PENALTY": -10,
+        "SETUP_OVERSTACK_THRESHOLD": 3,
         # --- PASSAGGIO TURNO ---
         "PASSIVE_TURN_PENALTY": -100,
         "PASS_PENALTY_CAP": -10000,

@@ -8,4 +8,5 @@ tests/
 scripts/
 pytest.ini
 .env
-.antigravity/
+.planning/
+.agent/
