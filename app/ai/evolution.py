@@ -139,8 +139,18 @@ class EvolutionManager:
     def save_best_agent(self, filename: str = 'best_agent.pkl') -> None:
         best_agent = max(self.population, key=lambda x: x.fitness)
         path = os.path.join('dataset', filename)
+        weights = best_agent.nn.get_weights()
+        # dump weights
         with open(path, 'wb') as f:
-            pickle.dump(best_agent.nn.get_weights(), f)
+            pickle.dump(weights, f)
+
+        # compute and log a checksum to help debugging (detect unchanged/same saves)
+        try:
+            import hashlib
+            md5 = hashlib.md5(weights.tobytes()).hexdigest()
+            print(f"[Evolution] Saved {path} (md5={md5}, fitness={best_agent.fitness})")
+        except Exception:
+            print(f"[Evolution] Saved {path} (fitness={best_agent.fitness})")
 
     def load_population(self, filename: str = 'best_agent.pkl') -> bool:
         path = filename
