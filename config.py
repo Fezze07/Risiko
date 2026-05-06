@@ -72,20 +72,20 @@ class Config:
     EVOLUTION: Dict[str, Any] = {
         "POPULATION_SIZE": 100,       # Quanti agenti per generazione
         "GENERATIONS": 1000000,       # Quante epoche di evoluzione
-        "ELITISM_COUNT": 20,          # I top 20 passano alla prossima gen senza modifiche (immortali)
-        "TOURNAMENT_SIZE": 12,         # Da quante persone è composto il torneo
-        "MUTATION_RATE": 0.03,         # Probabilità che un peso cambi
-        "MUTATION_STRENGTH": 0.05,     # Quanto forte è lo "scossone" al peso (deviazione standard)
+        "ELITISM_COUNT": 8,           # Top agenti che passano senza modifiche
+        "TOURNAMENT_SIZE": 6,         # Dimensione torneo
+        "MUTATION_RATE": 0.08,        # Probabilità che un peso cambi
+        "MUTATION_STRENGTH": 0.10,    # Deviazione standard della mutazione
         "MUTATION_STRENGTH_MIN": 0.02, # Limite inferiore della mutazione dinamica
-        "MUTATION_STRENGTH_MAX": 0.12, # Limite superiore della mutazione dinamica
-        "MUTATION_STRENGTH_BOOST": 1.5,# Fattore di aumento mutazione in stallo breve
+        "MUTATION_STRENGTH_MAX": 0.20, # Limite superiore della mutazione dinamica
+        "MUTATION_STRENGTH_BOOST": 2.0,# Fattore di aumento mutazione in stallo breve
         "CROSSOVER_RATE": 0.7,        # Frequenza di scambio DNA tra genitori
-        "STAGNATION_WINDOW": 12,       # Finestra generazioni per rilevare stallo
-        "STAGNATION_TRIGGER": 40,     # Generazioni consecutive prima della "catastrofe"
-        "CATASTROPHE_MUTATION_RATE": 0.35, # Quota geni mutati nella catastrofe
-        "CATASTROPHE_STRENGTH_MULT": 1.5,  # Moltiplicatore forza mutazione in catastrofe
-        "EPSILON_MIN": 0.02,          # Limite minimo esplorazione
-        "EPSILON_DECAY": 0.990,       # Decadimento epsilon per generazione
+        "STAGNATION_WINDOW": 8,       # Finestra generazioni per rilevare stallo
+        "STAGNATION_TRIGGER": 12,     # Generazioni consecutive prima della "catastrofe"
+        "CATASTROPHE_MUTATION_RATE": 0.45, # Quota geni mutati nella catastrofe
+        "CATASTROPHE_STRENGTH_MULT": 2.0,  # Moltiplicatore forza mutazione in catastrofe
+        "EPSILON_MIN": 0.02,
+        "EPSILON_DECAY": 0.995,       # Decadimento epsilon per generazione (più lento)
     }
 
     # =========================================
@@ -96,7 +96,8 @@ class Config:
         "DATASET_PATH": "dataset/human_dataset.jsonl",
         "MIN_SAMPLES": 100,
         "SAMPLE_SIZE": 512,
-        "IMITATION_WEIGHT": 100.0,
+        # Ridotto peso dell'imitation learning per non soffocare l'esplorazione
+        "IMITATION_WEIGHT": 20.0,
     }
 
     # ---------- CONFIGURAZIONE CARTE ----------
