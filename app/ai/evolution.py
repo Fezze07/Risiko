@@ -17,8 +17,8 @@ class EvolutionManager:
         self.population: List[Agent] = [Agent(board_ref, id=i) for i in range(self.population_size)]
 
         self.best_fitness_ever: float = -float('inf')
-        self.stagnation_counter: int = 0
         self.best_fitness_history: List[float] = []
+        self.stagnation_counter: int = 0
         self.current_mutation_strength: float = Config.EVOLUTION['MUTATION_STRENGTH']
         self.current_epsilon: float = Config.NN['EPSILON-GREEDY']
 
@@ -95,9 +95,10 @@ class EvolutionManager:
 
     def _update_logic(self, current_best: float) -> None:
         if current_best > self.best_fitness_ever:
-            self.best_fitness_ever = current_best
+            # self.best_fitness_ever viene aggiornato dentro save_best_agent
             self.stagnation_counter = 0
-            self.save_best_agent('hall_of_fame.pkl')
+            self.save_best_agent('hall_of_fame.pkl', force=True)
+            self.save_best_agent('best_agent.pkl', force=True)
         else:
             self.stagnation_counter += 1
 
@@ -136,21 +137,31 @@ class EvolutionManager:
         dna[mutation_mask] += noise[mutation_mask]
         return dna
 
-    def save_best_agent(self, filename: str = 'best_agent.pkl') -> None:
+    def save_best_agent(self, filename: str = 'best_agent.pkl', force: bool = False) -> None:
+        if not self.population:
+            return
+
         best_agent = max(self.population, key=lambda x: x.fitness)
         path = os.path.join('dataset', filename)
+
+        # Se non è forzato, salviamo solo se miglioriamo il record assoluto
+        if not force and best_agent.fitness <= self.best_fitness_ever:
+            return
+
+        # Se stiamo salvando il record assoluto (hall_of_fame o best_agent migliore), aggiorniamo il record
+        if best_agent.fitness > self.best_fitness_ever:
+            self.best_fitness_ever = best_agent.fitness
+
         weights = best_agent.nn.get_weights()
-        # dump weights
         with open(path, 'wb') as f:
             pickle.dump(weights, f)
 
-        # compute and log a checksum to help debugging (detect unchanged/same saves)
         try:
             import hashlib
             md5 = hashlib.md5(weights.tobytes()).hexdigest()
-            print(f"[Evolution] Saved {path} (md5={md5}, fitness={best_agent.fitness})")
+            print(f"[Evolution] NEW RECORD! Saved {path} (md5={md5}, fitness={best_agent.fitness:.2f})")
         except Exception:
-            print(f"[Evolution] Saved {path} (fitness={best_agent.fitness})")
+            print(f"[Evolution] NEW RECORD! Saved {path} (fitness={best_agent.fitness:.2f})")
 
     def load_population(self, filename: str = 'best_agent.pkl') -> bool:
         path = filename

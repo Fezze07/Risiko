@@ -238,7 +238,6 @@ class Main:
             avg_setup_overstack = setup_overstack_pen_sum / num_matches if num_matches > 0 else 0
             avg_post_attack_abandon = post_attack_abandon_pen_sum / num_matches if num_matches > 0 else 0
 
-            self.evo_manager.save_best_agent('best_agent.pkl')
 
             best_color = Fore.GREEN if best_agent.fitness >= 0 else Fore.RED
             avg_color = Fore.GREEN if avg_fitness >= 0 else Fore.RED
