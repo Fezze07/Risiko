@@ -1,0 +1,16 @@
+# Ignore dataset weights and hall-of-fame files (don't bake into image)
+dataset/*.pkl
+dataset/*.hof
+
+# Logs and virtual env
+logs/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Editor/temp
+.vscode/
+*.swp
+.DS_Store

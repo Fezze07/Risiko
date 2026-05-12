@@ -156,16 +156,39 @@ class EvolutionManager:
             'weights': best_agent.nn.get_weights(),
             'fitness': best_agent.fitness
         }
-        
-        with open(path, 'wb') as f:
-            pickle.dump(data, f)
 
+        # Ensure target directory exists
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        tmp_path = f"{path}.tmp"
         try:
-            import hashlib
-            md5 = hashlib.md5(data['weights'].tobytes()).hexdigest()
-            print(f"[Evolution] NEW RECORD! Saved {path} (md5={md5}, fitness={best_agent.fitness:.2f})")
-        except Exception:
-            print(f"[Evolution] NEW RECORD! Saved {path} (fitness={best_agent.fitness:.2f})")
+            # Write to temporary file and fsync for durability
+            with open(tmp_path, 'wb') as f:
+                pickle.dump(data, f)
+                f.flush()
+                try:
+                    os.fsync(f.fileno())
+                except Exception:
+                    pass
+
+            # Atomic replace
+            os.replace(tmp_path, path)
+
+            try:
+                import hashlib
+                md5 = hashlib.md5(data['weights'].tobytes()).hexdigest()
+                print(f"[Evolution] NEW RECORD! Saved {path} (md5={md5}, fitness={best_agent.fitness:.2f})")
+            except Exception:
+                print(f"[Evolution] NEW RECORD! Saved {path} (fitness={best_agent.fitness:.2f})")
+
+        except Exception as e:
+            # Cleanup temp file if exists
+            try:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+            except Exception:
+                pass
+            print(f"[Evolution] Errore durante il salvataggio di {path}: {e}")
 
     def load_population(self, filename: str = 'best_agent.pkl') -> bool:
         path = filename
@@ -175,8 +198,12 @@ class EvolutionManager:
         if not os.path.exists(path):
             return False
 
-        with open(path, 'rb') as f:
-            data = pickle.load(f)
+        try:
+            with open(path, 'rb') as f:
+                data = pickle.load(f)
+        except (EOFError, pickle.UnpicklingError, Exception) as e:
+            print(f"[Evolution] Errore nel caricamento di {path}: {e}")
+            return False
 
         if isinstance(data, dict) and 'weights' in data:
             best_weights = data['weights']
