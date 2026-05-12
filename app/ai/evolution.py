@@ -152,13 +152,17 @@ class EvolutionManager:
         if best_agent.fitness > self.best_fitness_ever:
             self.best_fitness_ever = best_agent.fitness
 
-        weights = best_agent.nn.get_weights()
+        data = {
+            'weights': best_agent.nn.get_weights(),
+            'fitness': best_agent.fitness
+        }
+        
         with open(path, 'wb') as f:
-            pickle.dump(weights, f)
+            pickle.dump(data, f)
 
         try:
             import hashlib
-            md5 = hashlib.md5(weights.tobytes()).hexdigest()
+            md5 = hashlib.md5(data['weights'].tobytes()).hexdigest()
             print(f"[Evolution] NEW RECORD! Saved {path} (md5={md5}, fitness={best_agent.fitness:.2f})")
         except Exception:
             print(f"[Evolution] NEW RECORD! Saved {path} (fitness={best_agent.fitness:.2f})")
@@ -172,7 +176,17 @@ class EvolutionManager:
             return False
 
         with open(path, 'rb') as f:
-            best_weights = pickle.load(f)
+            data = pickle.load(f)
+
+        if isinstance(data, dict) and 'weights' in data:
+            best_weights = data['weights']
+            loaded_fitness = data.get('fitness', -float('inf'))
+            # Aggiorniamo il record assoluto con quello caricato
+            if loaded_fitness > self.best_fitness_ever:
+                self.best_fitness_ever = loaded_fitness
+                print(f"[Evolution] Record di fitness caricato: {self.best_fitness_ever:.2f}")
+        else:
+            best_weights = data
 
         if not isinstance(best_weights, np.ndarray):
             print(f"[Evolution] Pesi in {filename} non validi, skip caricamento.")

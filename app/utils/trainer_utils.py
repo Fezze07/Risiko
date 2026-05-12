@@ -17,7 +17,11 @@ class TrainerUtils:
                 return None
             try:
                 with open(path, 'rb') as f:
-                    return pickle.load(f)
+                    data = pickle.load(f)
+                    # Support both old format (array) and new format (dict)
+                    if isinstance(data, dict) and 'weights' in data:
+                        return data['weights']
+                    return data
             except (EOFError, pickle.UnpicklingError, Exception) as e:
                 print(f"[TrainerUtils] Errore nel caricamento di {path}: {e}")
                 return None
